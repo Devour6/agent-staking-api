@@ -3,6 +3,7 @@ import { solanaService } from '@/services/solana';
 import { logger } from '@/services/logger';
 import { asyncHandler, createApiResponse } from '@/middleware/errorHandler';
 import { config } from '@/services/config';
+import packageJson from '../../package.json';
 
 interface HealthCheckResponse {
   status: 'healthy' | 'unhealthy';
@@ -15,6 +16,25 @@ interface HealthCheckResponse {
       latency?: number;
       cluster: string;
       error?: string;
+    };
+    rpcHealth: {
+      primary: {
+        url: string;
+        healthy: boolean;
+        consecutiveFailures: number;
+        averageLatency: number;
+        lastChecked: Date;
+        lastError?: string;
+      };
+      backup?: {
+        url: string;
+        healthy: boolean;
+        consecutiveFailures: number;
+        averageLatency: number;
+        lastChecked: Date;
+        lastError?: string;
+      };
+      currentlyUsing: 'primary' | 'backup';
     };
     api: {
       healthy: boolean;
@@ -68,10 +88,13 @@ export const healthCheck = asyncHandler(
     const isHealthy = solanaHealth.healthy && configHealth.healthy;
     const responseTime = Date.now() - startTime;
     
+    // Get RPC health status
+    const rpcHealthStatus = solanaService.getRpcHealthStatus();
+
     const healthResponse: HealthCheckResponse = {
       status: isHealthy ? 'healthy' : 'unhealthy',
       timestamp: new Date().toISOString(),
-      version: '1.0.0', // TODO: Get from package.json
+      version: packageJson.version,
       environment: config.server.nodeEnv,
       checks: {
         solana: {
@@ -80,6 +103,7 @@ export const healthCheck = asyncHandler(
           cluster: config.solana.cluster,
           ...(solanaHealth.error !== undefined && { error: solanaHealth.error }),
         },
+        rpcHealth: rpcHealthStatus,
         api: {
           healthy: true,
           uptime: Math.round(process.uptime()),

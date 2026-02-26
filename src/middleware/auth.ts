@@ -101,15 +101,14 @@ export const authenticateApiKey = (req: Request, res: Response, next: NextFuncti
 };
 
 /**
- * Validate API key using HMAC
- * In production, this would validate against a database of registered API keys
+ * Legacy API key validation function (deprecated)
+ * @deprecated Use apiKeyManager.validateApiKey() instead
+ * This function is kept for backward compatibility but is no longer used.
+ * All validation now goes through the ApiKeyManager service.
  */
 function isValidApiKey(apiKey: string): boolean {
   try {
-    // For Phase 1, we'll use a simple validation
-    // In production, implement proper API key validation with database lookup
-    
-    // Basic format validation
+    // Basic format validation for compatibility
     if (!apiKey || apiKey.length < 32) {
       return false;
     }
@@ -120,7 +119,6 @@ function isValidApiKey(apiKey: string): boolean {
     }
     
     // For development/testing, accept any valid format key
-    // TODO: Implement proper API key registration and validation
     return true;
   } catch (error) {
     logger.error('API key validation error', {

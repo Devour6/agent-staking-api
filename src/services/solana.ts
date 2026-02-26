@@ -3,6 +3,15 @@ import { config } from './config';
 import { logger } from './logger';
 import { metricsService } from './metrics';
 
+interface RpcEndpointHealth {
+  url: string;
+  isHealthy: boolean;
+  lastChecked: Date;
+  consecutiveFailures: number;
+  averageLatency: number;
+  lastError?: string;
+}
+
 class SolanaService {
   private connectionPool: Connection[] = [];
   private backupConnectionPool: Connection[] = [];
@@ -11,8 +20,33 @@ class SolanaService {
   private blockhashCacheMs = 30000; // 30 seconds
   private lastBlockhashFetch = 0;
   private poolSize = 5; // Number of connections in the pool
+  private healthMonitorInterval?: NodeJS.Timeout;
+  private primaryEndpointHealth: RpcEndpointHealth;
+  private backupEndpointHealth?: RpcEndpointHealth;
+  private usingBackup = false;
+  private readonly maxConsecutiveFailures = 3;
+  private readonly healthCheckIntervalMs = 30000; // 30 seconds
 
   constructor() {
+    // Initialize health tracking
+    this.primaryEndpointHealth = {
+      url: config.solana.rpcUrl,
+      isHealthy: true,
+      lastChecked: new Date(),
+      consecutiveFailures: 0,
+      averageLatency: 0,
+    };
+
+    if (config.solana.rpcUrlBackup) {
+      this.backupEndpointHealth = {
+        url: config.solana.rpcUrlBackup,
+        isHealthy: true,
+        lastChecked: new Date(),
+        consecutiveFailures: 0,
+        averageLatency: 0,
+      };
+    }
+
     // Create connection pool for better performance
     for (let i = 0; i < this.poolSize; i++) {
       const connection = new Connection(config.solana.rpcUrl, {
@@ -35,21 +69,38 @@ class SolanaService {
       }
     }
 
-    logger.info('Solana service initialized with connection pooling', {
+    // Start health monitoring (skip during tests)
+    if (process.env.NODE_ENV !== 'test') {
+      this.startHealthMonitoring();
+    }
+
+    logger.info('Solana service initialized with connection pooling and health monitoring', {
       rpcUrl: config.solana.rpcUrl,
       cluster: config.solana.cluster,
       poolSize: this.poolSize,
       hasBackup: this.backupConnectionPool.length > 0,
+      healthMonitoringEnabled: process.env.NODE_ENV !== 'test',
     });
   }
 
   /**
-   * Get connection from pool using round-robin
+   * Get connection from pool using health-aware selection
    */
   getConnection(): Connection {
+    // Use backup pool if we're in failover mode
+    if (this.usingBackup && this.backupConnectionPool.length > 0) {
+      const connection = this.backupConnectionPool[this.currentConnectionIndex % this.backupConnectionPool.length];
+      if (!connection) {
+        throw new Error('No backup connections available in pool');
+      }
+      this.currentConnectionIndex = (this.currentConnectionIndex + 1) % this.backupConnectionPool.length;
+      return connection;
+    }
+
+    // Use primary pool
     const connection = this.connectionPool[this.currentConnectionIndex];
     if (!connection) {
-      throw new Error('No connections available in pool');
+      throw new Error('No primary connections available in pool');
     }
     this.currentConnectionIndex = (this.currentConnectionIndex + 1) % this.poolSize;
     return connection;
@@ -277,6 +328,189 @@ class SolanaService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Start continuous health monitoring of RPC endpoints
+   */
+  private startHealthMonitoring(): void {
+    this.healthMonitorInterval = setInterval(async () => {
+      await this.performHealthChecks();
+    }, this.healthCheckIntervalMs);
+
+    logger.info('RPC health monitoring started', {
+      intervalMs: this.healthCheckIntervalMs,
+      maxConsecutiveFailures: this.maxConsecutiveFailures,
+    });
+  }
+
+  /**
+   * Stop health monitoring (for cleanup)
+   */
+  stopHealthMonitoring(): void {
+    if (this.healthMonitorInterval) {
+      clearInterval(this.healthMonitorInterval);
+      delete this.healthMonitorInterval;
+    }
+  }
+
+  /**
+   * Perform health checks on all RPC endpoints
+   */
+  private async performHealthChecks(): Promise<void> {
+    // Check primary endpoint
+    const primaryConnection = this.connectionPool[0];
+    if (primaryConnection) {
+      await this.checkEndpointHealth(this.primaryEndpointHealth, primaryConnection);
+    }
+
+    // Check backup endpoint if available
+    if (this.backupEndpointHealth && this.backupConnectionPool.length > 0) {
+      const backupConnection = this.backupConnectionPool[0];
+      if (backupConnection) {
+        await this.checkEndpointHealth(this.backupEndpointHealth, backupConnection);
+      }
+    }
+
+    // Decide whether to use backup
+    this.evaluateFailover();
+
+    // Track metrics
+    this.trackHealthMetrics();
+  }
+
+  /**
+   * Check health of a specific endpoint
+   */
+  private async checkEndpointHealth(healthInfo: RpcEndpointHealth, connection: Connection): Promise<void> {
+    const startTime = Date.now();
+    
+    try {
+      // Perform a lightweight health check
+      await Promise.race([
+        connection.getSlot(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Health check timeout')), 5000)
+        )
+      ]);
+
+      const latency = Date.now() - startTime;
+      
+      // Update health status
+      healthInfo.isHealthy = true;
+      healthInfo.lastChecked = new Date();
+      healthInfo.consecutiveFailures = 0;
+      healthInfo.averageLatency = (healthInfo.averageLatency + latency) / 2;
+      delete healthInfo.lastError;
+
+      logger.debug('RPC endpoint health check passed', {
+        url: healthInfo.url,
+        latency,
+        averageLatency: healthInfo.averageLatency,
+      });
+
+    } catch (error) {
+      const errorMessage = (error as Error).message;
+      
+      // Update health status
+      healthInfo.isHealthy = false;
+      healthInfo.lastChecked = new Date();
+      healthInfo.consecutiveFailures++;
+      healthInfo.lastError = errorMessage;
+
+      logger.warn('RPC endpoint health check failed', {
+        url: healthInfo.url,
+        consecutiveFailures: healthInfo.consecutiveFailures,
+        error: errorMessage,
+      });
+    }
+  }
+
+  /**
+   * Evaluate whether to failover to backup endpoint
+   */
+  private evaluateFailover(): void {
+    const primaryFailed = this.primaryEndpointHealth.consecutiveFailures >= this.maxConsecutiveFailures;
+    const backupAvailable = this.backupEndpointHealth?.isHealthy === true;
+
+    if (primaryFailed && backupAvailable && !this.usingBackup) {
+      // Failover to backup
+      this.usingBackup = true;
+      logger.error('Primary RPC endpoint failed - failing over to backup', {
+        primaryUrl: this.primaryEndpointHealth.url,
+        backupUrl: this.backupEndpointHealth?.url,
+        consecutiveFailures: this.primaryEndpointHealth.consecutiveFailures,
+      });
+    } else if (!primaryFailed && this.usingBackup && this.primaryEndpointHealth.isHealthy) {
+      // Recover to primary
+      this.usingBackup = false;
+      logger.info('Primary RPC endpoint recovered - switching back from backup', {
+        primaryUrl: this.primaryEndpointHealth.url,
+        backupUrl: this.backupEndpointHealth?.url,
+      });
+    }
+  }
+
+  /**
+   * Track health metrics for monitoring
+   */
+  private trackHealthMetrics(): void {
+    // Track primary endpoint metrics
+    metricsService.trackSolanaRpcCall(
+      'rpc_health_primary', 
+      this.primaryEndpointHealth.isHealthy, 
+      this.primaryEndpointHealth.averageLatency
+    );
+
+    // Track backup endpoint metrics if available
+    if (this.backupEndpointHealth) {
+      metricsService.trackSolanaRpcCall(
+        'rpc_health_backup', 
+        this.backupEndpointHealth.isHealthy, 
+        this.backupEndpointHealth.averageLatency
+      );
+    }
+
+    // Track failover status
+    const failoverMetrics = {
+      usingBackup: this.usingBackup ? 1 : 0,
+      primaryConsecutiveFailures: this.primaryEndpointHealth.consecutiveFailures,
+      backupConsecutiveFailures: this.backupEndpointHealth?.consecutiveFailures || 0,
+    };
+
+    logger.debug('RPC health metrics tracked', failoverMetrics);
+  }
+
+  /**
+   * Get current RPC health status for /metrics endpoint
+   */
+  getRpcHealthStatus() {
+    const primaryStatus = {
+      url: this.primaryEndpointHealth.url,
+      healthy: this.primaryEndpointHealth.isHealthy,
+      consecutiveFailures: this.primaryEndpointHealth.consecutiveFailures,
+      averageLatency: this.primaryEndpointHealth.averageLatency,
+      lastChecked: this.primaryEndpointHealth.lastChecked,
+      ...(this.primaryEndpointHealth.lastError && { lastError: this.primaryEndpointHealth.lastError }),
+    };
+
+    const result: any = {
+      primary: primaryStatus,
+      currentlyUsing: this.usingBackup ? 'backup' as const : 'primary' as const,
+    };
+
+    if (this.backupEndpointHealth) {
+      result.backup = {
+        url: this.backupEndpointHealth.url,
+        healthy: this.backupEndpointHealth.isHealthy,
+        consecutiveFailures: this.backupEndpointHealth.consecutiveFailures,
+        averageLatency: this.backupEndpointHealth.averageLatency,
+        lastChecked: this.backupEndpointHealth.lastChecked,
+        ...(this.backupEndpointHealth.lastError && { lastError: this.backupEndpointHealth.lastError }),
+      };
+    }
+
+    return result;
   }
 }
 
