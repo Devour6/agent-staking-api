@@ -75,6 +75,70 @@ export const validationSchemas = {
       .max(1000000) // Maximum 0.001 SOL priority fee
       .optional(),
   }),
+
+  // Webhook validation schemas
+  registerWebhookRequest: Joi.object({
+    url: Joi.string()
+      .uri({ scheme: ['https'] })
+      .required()
+      .description('HTTPS webhook URL'),
+    events: Joi.array()
+      .items(Joi.string().valid(
+        'stake_confirmed',
+        'stake_activated',
+        'unstake_completed',
+        'reward_earned',
+        'validator_delinquent'
+      ))
+      .min(1)
+      .required()
+      .description('List of events to subscribe to'),
+    secret: Joi.string()
+      .min(16)
+      .max(128)
+      .optional()
+      .description('Optional webhook secret (will generate if not provided)'),
+  }),
+
+  buildAndMonitorRequest: Joi.object({
+    agentWallet: publicKeySchema.required(),
+    amount: Joi.number()
+      .integer()
+      .min(1000000) // Minimum 0.001 SOL
+      .max(1000 * LAMPORTS_PER_SOL) // Maximum 1000 SOL per transaction
+      .required()
+      .description('Stake amount in lamports'),
+    validatorVoteAccount: publicKeySchema.optional(),
+    webhookUrl: Joi.string()
+      .uri({ scheme: ['https'] })
+      .optional()
+      .description('Optional HTTPS webhook URL for monitoring'),
+    webhookEvents: Joi.array()
+      .items(Joi.string().valid(
+        'stake_confirmed',
+        'stake_activated',
+        'unstake_completed',
+        'reward_earned',
+        'validator_delinquent'
+      ))
+      .optional()
+      .description('Events to monitor (defaults to stake_confirmed, stake_activated)'),
+  }),
+
+  monitorStakeRequest: Joi.object({
+    transactionSignature: Joi.string()
+      .pattern(/^[1-9A-HJ-NP-Za-km-z]{87,88}$/)
+      .required()
+      .description('Base58 transaction signature'),
+    stakeAccount: publicKeySchema.required(),
+    agentWallet: publicKeySchema.required(),
+    validatorVoteAccount: publicKeySchema.optional(),
+    amount: Joi.number()
+      .integer()
+      .min(0)
+      .optional()
+      .description('Stake amount in lamports'),
+  }),
 };
 
 /**

@@ -4,6 +4,9 @@ import helmet from 'helmet';
 import compression from 'compression';
 import { config } from '@/services/config';
 import { logger } from '@/services/logger';
+import { storage } from '@/services/storage';
+import { stakeMonitoringService } from '@/services/monitoring';
+import { webhookDeliveryService } from '@/services/webhookDelivery';
 import routes from '@/routes';
 import { errorHandler, notFoundHandler } from '@/middleware/errorHandler';
 
@@ -106,6 +109,8 @@ app.get('/', (req, res) => {
       health: '/health',
       docs: '/api/docs',
       stake: '/stake/build',
+      'stake-and-monitor': '/stake/build-and-monitor',
+      webhooks: '/webhooks',
     },
   });
 });
@@ -119,16 +124,69 @@ app.use(notFoundHandler);
 // Global error handler (must be last middleware)
 app.use(errorHandler);
 
-// Graceful shutdown handling
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  process.exit(0);
+// Initialize services
+let retryProcessorInterval: NodeJS.Timeout | undefined;
+let validatorMonitoringInterval: NodeJS.Timeout | undefined;
+
+async function initializeServices(): Promise<void> {
+  try {
+    // Initialize storage
+    await storage.init();
+    
+    // Start monitoring services
+    stakeMonitoringService.startMonitoring();
+    
+    // Start webhook retry processor
+    retryProcessorInterval = webhookDeliveryService.startRetryProcessor();
+    
+    // Start validator performance monitoring
+    validatorMonitoringInterval = stakeMonitoringService.startValidatorMonitoring();
+    
+    logger.info('All services initialized successfully');
+  } catch (error) {
+    logger.error('Failed to initialize services', {
+      error: (error as Error).message,
+    });
+    process.exit(1);
+  }
+}
+
+// Initialize services (don't await, let it run in background)
+initializeServices().catch(error => {
+  logger.error('Service initialization error', {
+    error: (error as Error).message,
+  });
+  process.exit(1);
 });
 
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down gracefully');
+// Graceful shutdown handling
+async function gracefulShutdown(signal: string): Promise<void> {
+  logger.info(`${signal} received, shutting down gracefully`);
+  
+  try {
+    // Stop monitoring services
+    stakeMonitoringService.stopMonitoring();
+    
+    if (retryProcessorInterval) {
+      clearInterval(retryProcessorInterval);
+    }
+    
+    if (validatorMonitoringInterval) {
+      clearInterval(validatorMonitoringInterval);
+    }
+    
+    logger.info('All services stopped successfully');
+  } catch (error) {
+    logger.error('Error during graceful shutdown', {
+      error: (error as Error).message,
+    });
+  }
+  
   process.exit(0);
-});
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Log application startup
 logger.info('Express application configured', {

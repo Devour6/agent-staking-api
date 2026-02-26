@@ -2,8 +2,16 @@ import { Router } from 'express';
 import { 
   buildNativeStakeTransaction, 
   buildLiquidStakeTransaction, 
-  buildUnstakeTransaction 
+  buildUnstakeTransaction,
+  buildAndMonitorStakeTransaction,
+  monitorStakeTransaction
 } from '@/controllers/stake';
+import {
+  registerWebhook,
+  listWebhooks,
+  deleteWebhook,
+  getWebhookDeliveries
+} from '@/controllers/webhook';
 import { 
   healthCheck, 
   livenessCheck, 
@@ -40,6 +48,7 @@ router.get('/api/docs/openapi', readOnlyRateLimit, getOpenApiSpec);
 // Authenticated endpoints
 router.use('/stake', authenticateApiKey, extractAgentWallet);
 router.use('/unstake', authenticateApiKey, extractAgentWallet);
+router.use('/webhooks', authenticateApiKey);
 
 // Native staking endpoint
 router.post(
@@ -63,6 +72,47 @@ router.post(
   walletRateLimit,
   validateRequest(validationSchemas.unstakeRequest),
   buildUnstakeTransaction
+);
+
+// Enhanced staking endpoints
+router.post(
+  '/stake/build-and-monitor',
+  walletRateLimit,
+  validateRequest(validationSchemas.buildAndMonitorRequest),
+  buildAndMonitorStakeTransaction
+);
+
+router.post(
+  '/stake/monitor',
+  walletRateLimit,
+  validateRequest(validationSchemas.monitorStakeRequest),
+  monitorStakeTransaction
+);
+
+// Webhook endpoints
+router.post(
+  '/webhooks/register',
+  readOnlyRateLimit,
+  validateRequest(validationSchemas.registerWebhookRequest),
+  registerWebhook
+);
+
+router.get(
+  '/webhooks',
+  readOnlyRateLimit,
+  listWebhooks
+);
+
+router.delete(
+  '/webhooks/:id',
+  readOnlyRateLimit,
+  deleteWebhook
+);
+
+router.get(
+  '/webhooks/:id/deliveries',
+  readOnlyRateLimit,
+  getWebhookDeliveries
 );
 
 export default router;
