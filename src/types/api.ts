@@ -74,7 +74,7 @@ export interface ValidatorInfo {
   commission: number;
   apy: number;
   isPhaseValidator: boolean;
-  health: 'excellent' | 'good' | 'fair';
+  health: 'excellent' | 'good' | 'fair' | 'poor';
 }
 
 export interface StakeRecommendationResponse {

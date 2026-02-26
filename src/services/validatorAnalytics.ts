@@ -3,7 +3,7 @@
  * Integrates with external validator analytics API to provide live validator data
  */
 
-import axios, { AxiosInstance } from 'axios';
+import axios from 'axios';
 import { logger } from './logger';
 import { config } from './config';
 
@@ -45,7 +45,7 @@ export interface ValidatorInfo {
 }
 
 class ValidatorAnalyticsService {
-  private client: AxiosInstance;
+  private client: any;
   private cacheTimeout = 5 * 60 * 1000; // 5 minutes
   private cache: {
     data: ValidatorAnalyticsResponse | null;
@@ -69,25 +69,25 @@ class ValidatorAnalyticsService {
     });
 
     // Request interceptor for logging
-    this.client.interceptors.request.use((config) => {
+    this.client.interceptors.request.use((config: any) => {
       logger.debug('Validator analytics API request', {
-        url: config.url,
-        method: config.method,
-        baseURL: config.baseURL
+        url: config.url ?? '',
+        method: config.method ?? '',
+        baseURL: config.baseURL ?? ''
       });
       return config;
     });
 
     // Response interceptor for error handling
     this.client.interceptors.response.use(
-      (response) => {
+      (response: any) => {
         logger.debug('Validator analytics API response', {
           status: response.status,
           dataSize: JSON.stringify(response.data).length
         });
         return response;
       },
-      (error) => {
+      (error: any) => {
         logger.error('Validator analytics API error', {
           message: error.message,
           status: error.response?.status,
@@ -311,7 +311,9 @@ class ValidatorAnalyticsService {
       if (phaseValidatorIndex > 0) {
         // Move Phase validator to front
         const phaseValidator = sortedValidators.splice(phaseValidatorIndex, 1)[0];
-        sortedValidators.unshift(phaseValidator);
+        if (phaseValidator) {
+          sortedValidators.unshift(phaseValidator);
+        }
       }
 
       // Transform to ValidatorInfo format
