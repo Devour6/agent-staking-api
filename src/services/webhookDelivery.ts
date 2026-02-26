@@ -37,9 +37,9 @@ export class WebhookDeliveryService {
         )
       );
 
-      // Attempt immediate delivery for all webhooks
+      // Attempt immediate delivery for all webhooks (only once, retries go to background queue)
       await Promise.all(
-        deliveries.map(delivery => this.attemptDelivery(delivery))
+        deliveries.map(delivery => this.attemptInitialDelivery(delivery))
       );
 
     } catch (error) {
@@ -69,6 +69,112 @@ export class WebhookDeliveryService {
     return delivery;
   }
 
+  private async attemptInitialDelivery(delivery: WebhookDelivery): Promise<void> {
+    // Initial delivery attempt only - no retries, failures go to background queue
+    try {
+      const webhook = await storage.getWebhookById(delivery.webhookId);
+      if (!webhook || !webhook.active) {
+        logger.warn('Webhook not found or inactive', {
+          deliveryId: delivery.id,
+          webhookId: delivery.webhookId,
+        });
+        return;
+      }
+
+      delivery.attempt = 1;
+      
+      logger.info('Attempting webhook delivery', {
+        deliveryId: delivery.id,
+        webhookId: delivery.webhookId,
+        url: webhook.url,
+        attempt: delivery.attempt,
+        event: delivery.event,
+      });
+
+      const payload: WebhookPayload = {
+        event: delivery.event,
+        data: delivery.payload,
+        webhook: {
+          id: webhook.id,
+          timestamp: new Date().toISOString(),
+        },
+      };
+
+      const signature = this.generateSignature(payload, webhook.secret);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.deliveryTimeoutMs);
+
+      const response = await fetch(webhook.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Webhook-Signature-256': `sha256=${signature}`,
+          'X-Webhook-ID': delivery.webhookId,
+          'X-Webhook-Event': delivery.event,
+          'User-Agent': 'Phase-Webhooks/1.0',
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      delivery.responseStatus = response.status;
+      delivery.responseBody = await response.text().catch(() => '');
+
+      if (response.ok) {
+        delivery.status = 'success';
+        delivery.deliveredAt = new Date().toISOString();
+        
+        webhook.lastDeliveryAt = delivery.deliveredAt;
+        webhook.failureCount = 0;
+        await storage.saveWebhook(webhook);
+
+        logger.info('Webhook delivered successfully', {
+          deliveryId: delivery.id,
+          webhookId: delivery.webhookId,
+          responseStatus: response.status,
+          attempt: delivery.attempt,
+        });
+      } else {
+        // Mark as failed and set for retry queue
+        delivery.status = 'failed';
+        delivery.nextRetryAt = this.calculateNextRetry(delivery.attempt);
+        
+        webhook.failureCount += 1;
+        await storage.saveWebhook(webhook);
+
+        logger.warn('Webhook delivery failed', {
+          deliveryId: delivery.id,
+          webhookId: delivery.webhookId,
+          responseStatus: delivery.responseStatus,
+          attempt: delivery.attempt,
+        });
+      }
+
+    } catch (error) {
+      // Mark as failed and set for retry queue
+      delivery.status = 'failed';
+      delivery.nextRetryAt = this.calculateNextRetry(1);
+      
+      const webhook = await storage.getWebhookById(delivery.webhookId);
+      if (webhook) {
+        webhook.failureCount += 1;
+        await storage.saveWebhook(webhook);
+      }
+
+      logger.error('Webhook delivery error', {
+        deliveryId: delivery.id,
+        webhookId: delivery.webhookId,
+        error: (error as Error).message,
+        attempt: delivery.attempt,
+      });
+    } finally {
+      await storage.saveDelivery(delivery);
+    }
+  }
+
   private async attemptDelivery(delivery: WebhookDelivery): Promise<void> {
     try {
       const webhook = await storage.getWebhookById(delivery.webhookId);
@@ -94,7 +200,7 @@ export class WebhookDeliveryService {
         event: delivery.event,
         data: delivery.payload,
         webhook: {
-          id: delivery.webhookId,
+          id: webhook.id,
           timestamp: new Date().toISOString(),
         },
       };

@@ -19,6 +19,17 @@ describe('WebhookDeliveryService', () => {
     let testWebhook: WebhookRegistration;
 
     beforeEach(async () => {
+      // Clear all existing webhooks to ensure test isolation
+      const existingWebhooks = await storage.getWebhooks();
+      for (const webhook of existingWebhooks) {
+        await storage.deleteWebhook(webhook.id, webhook.apiKey);
+      }
+      
+      // Clear all deliveries by re-initializing the deliveries file
+      const fs = require('fs/promises');
+      const path = require('path');
+      await fs.writeFile(path.join('data', 'deliveries.json'), JSON.stringify([], null, 2));
+      
       testWebhook = {
         id: 'test-webhook-id',
         apiKey: 'test-api-key',

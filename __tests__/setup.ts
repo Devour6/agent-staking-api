@@ -1,7 +1,7 @@
 // Set up test environment variables before importing other modules
 process.env.NODE_ENV = 'test';
 process.env.SOLANA_RPC_URL = 'https://api.devnet.solana.com';
-process.env.SOLANA_CLUSTER = 'devnet';
+process.env.SOLANA_CLUSTER = 'mainnet-beta';
 process.env.PHASE_FEE_WALLET = '11111111111111111111111111111112';
 process.env.PHASE_VALIDATOR_VOTE_ACCOUNT = '11111111111111111111111111111113';
 process.env.API_KEY_SECRET = 'a'.repeat(64);
