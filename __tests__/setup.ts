@@ -1,36 +1,37 @@
-/**
- * Jest setup file for global test configuration
- */
-
-// Set test environment variables
+// Set up test environment variables before importing other modules
 process.env.NODE_ENV = 'test';
-process.env.PORT = '3001';
-process.env.SOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com';
-process.env.SOLANA_CLUSTER = 'mainnet-beta';
-process.env.PHASE_FEE_WALLET = 'Cq9Ms1KrMBYfrR2EhGBNgQYmxUG7CxEEkmRyXEjwqK8D';
-process.env.PHASE_VALIDATOR_VOTE_ACCOUNT = '8p1VGE8YZYfYAJaJ9UfZLFjR5jhJhzjzKvVv5HYjLXhm';
-process.env.RAKE_FEE_BASIS_POINTS = '10';
-process.env.API_KEY_SECRET = 'test-secret-key-that-is-long-enough-for-validation';
-process.env.RATE_LIMIT_WINDOW_MS = '60000';
-process.env.RATE_LIMIT_MAX_REQUESTS = '100';
-process.env.LOG_LEVEL = 'error'; // Reduce log noise in tests
-process.env.HEALTH_CHECK_TIMEOUT_MS = '2000';
+process.env.SOLANA_RPC_URL = 'https://api.devnet.solana.com';
+process.env.SOLANA_CLUSTER = 'devnet';
+process.env.PHASE_FEE_WALLET = '11111111111111111111111111111112';
+process.env.PHASE_VALIDATOR_VOTE_ACCOUNT = '11111111111111111111111111111113';
+process.env.API_KEY_SECRET = 'a'.repeat(64);
 
-// Mock console methods to reduce test output noise
-const originalError = console.error;
-const originalWarn = console.warn;
-const originalLog = console.log;
+import { stakeMonitoringService } from '../src/services/monitoring';
 
-beforeAll(() => {
-  console.error = jest.fn();
-  console.warn = jest.fn();
-  console.log = jest.fn();
+// Jest setup for all tests
+
+// Prevent monitoring services from starting during tests
+jest.spyOn(stakeMonitoringService, 'startMonitoring').mockImplementation(() => {
+  // Do nothing in tests
 });
 
+jest.spyOn(stakeMonitoringService, 'startValidatorMonitoring').mockImplementation(() => {
+  return {} as any; // Return mock timeout
+});
+
+// Mock setTimeout to prevent background timers in tests
+const originalSetInterval = global.setInterval;
+const intervals: NodeJS.Timeout[] = [];
+
+global.setInterval = ((callback: any, ms?: number) => {
+  const interval = originalSetInterval(callback, ms || 0);
+  intervals.push(interval);
+  return interval;
+}) as any;
+
 afterAll(async () => {
-  console.error = originalError;
-  console.warn = originalWarn;
-  console.log = originalLog;
+  // Clean up intervals
+  intervals.forEach(interval => clearInterval(interval));
   
   // Force cleanup of any open handles
   await new Promise(resolve => setTimeout(resolve, 100));
