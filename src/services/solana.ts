@@ -133,6 +133,19 @@ class SolanaService {
   }
 
   /**
+   * Get current epoch number
+   */
+  async getCurrentEpoch(): Promise<number> {
+    try {
+      const epochInfo = await this.getEpochInfo();
+      return epochInfo.epoch;
+    } catch (error) {
+      logger.error('Failed to fetch current epoch', { error: (error as Error).message });
+      throw error;
+    }
+  }
+
+  /**
    * Health check - verify connection
    */
   async healthCheck(): Promise<{ healthy: boolean; latency?: number; error?: string }> {
