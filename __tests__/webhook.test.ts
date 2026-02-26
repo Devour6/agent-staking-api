@@ -35,7 +35,7 @@ describe('Webhook API', () => {
       expect(response.body.success).toBe(true);
       expect(response.body.data).toHaveProperty('id');
       expect(response.body.data).toHaveProperty('secret');
-      expect(response.body.data.url).toBe(testWebhookUrl);
+      expect(response.body.data.url).toBe(webhookData.url);
       expect(response.body.data.events).toEqual(webhookData.events);
       expect(response.body.data).toHaveProperty('createdAt');
     });
