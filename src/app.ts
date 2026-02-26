@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import { config } from '@/services/config';
 import { logger } from '@/services/logger';
+import { metricsService } from '@/services/metrics';
 import routes from '@/routes';
 import { errorHandler, notFoundHandler } from '@/middleware/errorHandler';
 
@@ -93,6 +94,9 @@ app.use((req, res, next) => {
 
   next();
 });
+
+// Metrics tracking middleware
+app.use(metricsService.trackHttpRequest());
 
 // Health check endpoint at root for load balancers
 app.get('/', (req, res) => {

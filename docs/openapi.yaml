@@ -1,0 +1,513 @@
+openapi: 3.0.3
+info:
+  title: Phase Agent Staking API
+  description: |
+    Phase Agent Staking API provides a non-custodial transaction builder service for AI agents to stake SOL tokens on the Solana network. 
+    
+    The API builds unsigned transactions that agents can review and sign using their own private keys, ensuring non-custodial security.
+    
+    ## Features
+    - **Non-custodial**: Agents maintain control of their private keys
+    - **Transaction Building**: Returns unsigned transactions for agent review
+    - **Solana Integration**: Native Solana staking support
+    - **Rate Limited**: Protects against abuse
+    - **Monitored**: Comprehensive metrics and logging
+    
+    ## Authentication
+    All endpoints (except health and docs) require API key authentication via Bearer token:
+    ```
+    Authorization: Bearer <your-api-key>
+    ```
+  version: '1.0.0'
+  contact:
+    name: Phase Labs
+    url: https://phase.com
+    email: support@phase.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://staking-api.phase.com
+    description: Production server
+  - url: https://staking-api-staging.phase.com
+    description: Staging server
+  - url: http://localhost:3000
+    description: Development server
+
+paths:
+  /:
+    get:
+      summary: API Root
+      description: Returns basic API information and available endpoints
+      tags:
+        - General
+      responses:
+        '200':
+          description: API information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                    example: "Phase Agent Staking API"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  status:
+                    type: string
+                    example: "running"
+                  timestamp:
+                    type: string
+                    format: date-time
+                  environment:
+                    type: string
+                    example: "production"
+                  endpoints:
+                    type: object
+                    properties:
+                      health:
+                        type: string
+                        example: "/health"
+                      docs:
+                        type: string
+                        example: "/api/docs"
+                      stake:
+                        type: string
+                        example: "/stake/build"
+
+  /health:
+    get:
+      summary: Comprehensive Health Check
+      description: Returns detailed health status including Solana connectivity and configuration validation
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Health check successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /health/live:
+    get:
+      summary: Liveness Probe
+      description: Simple liveness check for container orchestration
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "alive"
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /health/ready:
+    get:
+      summary: Readiness Probe
+      description: Check if service is ready to handle requests
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ready"
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /metrics:
+    get:
+      summary: Prometheus Metrics
+      description: Returns metrics in Prometheus format for monitoring
+      tags:
+        - Monitoring
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: |
+                  # HELP http_requests_total Total number of HTTP requests
+                  # TYPE http_requests_total counter
+                  http_requests_total{route="/health",method="GET",status_code="200"} 42
+                  
+                  # HELP transaction_build_total Total number of transaction build requests
+                  # TYPE transaction_build_total counter
+                  transaction_build_total{transaction_type="native_stake",success="true"} 15
+
+  /stake/build:
+    post:
+      summary: Build Native Staking Transaction
+      description: |
+        Builds an unsigned transaction for native SOL staking to a validator.
+        Returns the transaction for the agent to review and sign.
+      tags:
+        - Staking
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NativeStakeRequest'
+            examples:
+              basic:
+                summary: Basic staking request
+                value:
+                  agentWallet: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+                  stakeAmount: 1.5
+              with_validator:
+                summary: Staking to specific validator
+                value:
+                  agentWallet: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+                  stakeAmount: 10.0
+                  validatorVoteAccount: "8p1VGE8YZYfYAJaJ9UfZLFjR5jhJhzjzKvVv5HYjLXhm"
+      responses:
+        '200':
+          description: Transaction built successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /stake/liquid/build:
+    post:
+      summary: Build Liquid Staking Transaction (Coming Soon)
+      description: |
+        Builds an unsigned transaction for liquid staking.
+        Currently returns 501 Not Implemented - will be available in Phase 2.
+      tags:
+        - Staking
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LiquidStakeRequest'
+      responses:
+        '501':
+          description: Not implemented yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /unstake/build:
+    post:
+      summary: Build Unstaking Transaction (Coming Soon)
+      description: |
+        Builds an unsigned transaction for unstaking SOL.
+        Currently returns 501 Not Implemented - will be available in Phase 2.
+      tags:
+        - Staking
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnstakeRequest'
+      responses:
+        '501':
+          description: Not implemented yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/docs:
+    get:
+      summary: API Documentation
+      description: Interactive API documentation (Swagger UI)
+      tags:
+        - Documentation
+      responses:
+        '200':
+          description: HTML documentation page
+          content:
+            text/html:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      description: |
+        API key authentication using Bearer token.
+        Include your API key in the Authorization header:
+        `Authorization: Bearer <your-api-key>`
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [healthy, degraded, unhealthy]
+              example: "healthy"
+            timestamp:
+              type: string
+              format: date-time
+            version:
+              type: string
+              example: "1.0.0"
+            environment:
+              type: string
+              example: "production"
+            uptime:
+              type: number
+              description: Uptime in seconds
+              example: 3661.234
+            checks:
+              type: object
+              properties:
+                solana:
+                  type: object
+                  properties:
+                    healthy:
+                      type: boolean
+                    cluster:
+                      type: string
+                      example: "mainnet-beta"
+                    latency:
+                      type: number
+                      description: RPC latency in milliseconds
+                      example: 42
+                api:
+                  type: object
+                  properties:
+                    healthy:
+                      type: boolean
+                    uptime:
+                      type: number
+                    memory:
+                      type: object
+                      properties:
+                        used:
+                          type: number
+                        total:
+                          type: number
+                config:
+                  type: object
+                  properties:
+                    healthy:
+                      type: boolean
+                    rpcUrl:
+                      type: string
+                    validatorConfigured:
+                      type: boolean
+                    feeWalletConfigured:
+                      type: boolean
+
+    NativeStakeRequest:
+      type: object
+      required:
+        - agentWallet
+        - stakeAmount
+      properties:
+        agentWallet:
+          type: string
+          description: Agent's Solana wallet public key (base58 encoded)
+          pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
+          example: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+        stakeAmount:
+          type: number
+          description: Amount of SOL to stake (minimum 0.01 SOL)
+          minimum: 0.01
+          maximum: 1000
+          example: 1.5
+        validatorVoteAccount:
+          type: string
+          description: Validator vote account (optional, defaults to Phase validator)
+          pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
+          example: "8p1VGE8YZYfYAJaJ9UfZLFjR5jhJhzjzKvVv5HYjLXhm"
+
+    LiquidStakeRequest:
+      type: object
+      required:
+        - agentWallet
+        - amount
+      properties:
+        agentWallet:
+          type: string
+          description: Agent's Solana wallet public key
+          example: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+        amount:
+          type: number
+          description: Amount of SOL to liquid stake
+          example: 1.5
+
+    UnstakeRequest:
+      type: object
+      required:
+        - agentWallet
+        - stakeAccount
+      properties:
+        agentWallet:
+          type: string
+          description: Agent's Solana wallet public key
+          example: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+        stakeAccount:
+          type: string
+          description: Stake account to unstake from
+          example: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
+
+    TransactionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            transaction:
+              type: object
+              description: Unsigned transaction object
+              properties:
+                instructions:
+                  type: array
+                  description: Array of transaction instructions
+                  items:
+                    type: object
+                recentBlockhash:
+                  type: string
+                  description: Recent blockhash
+                  example: "EkSnNWid2cvwEVnVx9aBqawnmiCNiDgp3gUdkDPTKN1N"
+                feePayer:
+                  type: string
+                  description: Fee payer public key
+                  example: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+            metadata:
+              type: object
+              properties:
+                stakeAccount:
+                  type: string
+                  description: Generated stake account public key
+                  example: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
+                validator:
+                  type: string
+                  description: Validator vote account
+                  example: "8p1VGE8YZYfYAJaJ9UfZLFjR5jhJhzjzKvVv5HYjLXhm"
+                estimatedApy:
+                  type: number
+                  description: Estimated annual percentage yield
+                  example: 7.2
+                fees:
+                  type: object
+                  properties:
+                    transactionFee:
+                      type: number
+                      description: Transaction fee in lamports
+                      example: 5000
+                    rakeFee:
+                      type: number
+                      description: Phase rake fee in lamports
+                      example: 1000000
+        timestamp:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Error code
+              enum:
+                - VALIDATION_ERROR
+                - INVALID_API_KEY
+                - INSUFFICIENT_BALANCE
+                - SOLANA_RPC_ERROR
+                - NOT_IMPLEMENTED
+                - INTERNAL_ERROR
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              description: Human readable error message
+              example: "Invalid agent wallet address"
+            details:
+              type: object
+              description: Additional error details (optional)
+        timestamp:
+          type: string
+          format: date-time
+
+tags:
+  - name: General
+    description: General API information
+  - name: Health
+    description: Health check endpoints
+  - name: Monitoring
+    description: Monitoring and metrics
+  - name: Staking
+    description: Staking transaction building
+  - name: Documentation
+    description: API documentation
+
+externalDocs:
+  description: Phase Labs Documentation
+  url: https://docs.phase.com

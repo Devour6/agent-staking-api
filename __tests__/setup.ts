@@ -27,10 +27,22 @@ beforeAll(() => {
   console.log = jest.fn();
 });
 
-afterAll(() => {
+afterAll(async () => {
   console.error = originalError;
   console.warn = originalWarn;
   console.log = originalLog;
+  
+  // Force cleanup of any open handles
+  await new Promise(resolve => setTimeout(resolve, 100));
+});
+
+// Global test teardown for each test file
+afterEach(async () => {
+  // Clear any timers that may have been set during tests
+  jest.clearAllTimers();
+  
+  // Small delay to allow connections to cleanup
+  await new Promise(resolve => setTimeout(resolve, 50));
 });
 
 // Set longer timeout for integration tests

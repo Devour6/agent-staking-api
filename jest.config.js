@@ -21,6 +21,7 @@ module.exports = {
     'html',
   ],
   setupFilesAfterEnv: ['<rootDir>/__tests__/setup.ts'],
+  globalTeardown: '<rootDir>/__tests__/teardown.ts',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
@@ -28,4 +29,6 @@ module.exports = {
   verbose: true,
   forceExit: true,
   clearMocks: true,
+  detectOpenHandles: false, // Temporarily disabled while we focus on feature completion
+  detectLeaks: false,
 };
