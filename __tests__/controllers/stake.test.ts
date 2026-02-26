@@ -3,7 +3,8 @@ import app from '../../src/app';
 import { generateApiKey } from '../../src/middleware/auth';
 
 describe('Stake Controller', () => {
-  const validApiKey = generateApiKey();
+  // Use the default API key from environment (set in test setup)
+  const validApiKey = process.env.API_KEY_SECRET || 'test-secret-key-that-is-long-enough-for-validation';
   const validAgentWallet = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
   const validValidatorVoteAccount = '8p1VGE8YZYfYAJaJ9UfZLFjR5jhJhzjzKvVv5HYjLXhm';
   const stakeAmount = 1000000000; // 1 SOL in lamports

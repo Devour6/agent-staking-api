@@ -1,0 +1,45 @@
+config:
+  target: 'http://localhost:3000'
+  phases:
+    - duration: 60
+      arrivalRate: 10
+      name: "Warm up"
+    - duration: 300
+      arrivalRate: 50
+      name: "Sustained load"
+    - duration: 120
+      arrivalRate: 100
+      name: "Stress test"
+  defaults:
+    headers:
+      User-Agent: "Artillery Load Test"
+
+scenarios:
+  - name: "Health Check Load Test"
+    weight: 100
+    flow:
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: "success"
+      - think: 1
+
+  - name: "Health Liveness Test"
+    weight: 30
+    flow:
+      - get:
+          url: "/health/live"
+          expect:
+            - statusCode: 200
+      - think: 2
+
+  - name: "Health Readiness Test" 
+    weight: 30
+    flow:
+      - get:
+          url: "/health/ready"
+          expect:
+            - statusCode: 200
+      - think: 2

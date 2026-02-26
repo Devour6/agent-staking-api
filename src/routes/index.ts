@@ -16,6 +16,7 @@ import {
   getApiDocumentation, 
   getOpenApiSpec 
 } from '@/controllers/docs';
+import { getMetrics } from '@/controllers/metrics';
 import { 
   authenticateApiKey, 
   extractAgentWallet 
@@ -39,6 +40,9 @@ router.get('/health/ready', readinessCheck);
 // API documentation endpoints (no auth required)
 router.get('/api/docs', readOnlyRateLimit, getApiDocumentation);
 router.get('/api/docs/openapi', readOnlyRateLimit, getOpenApiSpec);
+
+// Metrics endpoint (no auth required, for monitoring systems)
+router.get('/metrics', getMetrics);
 
 // Authenticated endpoints
 router.use('/stake', authenticateApiKey, extractAgentWallet);

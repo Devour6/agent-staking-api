@@ -2,12 +2,14 @@ import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { config } from '@/services/config';
 import { logger } from '@/services/logger';
+import { apiKeyManager } from '@/services/apiKeyManager';
 
 // Extend Request interface to include apiKey
 declare global {
   namespace Express {
     interface Request {
       apiKey?: string;
+      apiKeyId?: string;
       agentWallet?: string;
     }
   }
@@ -47,8 +49,9 @@ export const authenticateApiKey = (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    // Validate API key
-    if (!isValidApiKey(token)) {
+    // Validate API key using the manager
+    const validation = apiKeyManager.validateApiKey(token);
+    if (!validation.valid) {
       logger.warn('Invalid API key attempt', {
         ip: req.ip,
         userAgent: req.get('User-Agent'),
@@ -66,13 +69,17 @@ export const authenticateApiKey = (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    // Store API key in request for potential logging
+    // Store API key and key ID in request for potential logging
     req.apiKey = token;
+    if (validation.keyId) {
+      req.apiKeyId = validation.keyId;
+    }
     
     logger.debug('API key authenticated', {
       path: req.path,
       method: req.method,
       ip: req.ip,
+      keyId: validation.keyId,
     });
 
     next();

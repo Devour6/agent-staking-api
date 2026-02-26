@@ -1,0 +1,40 @@
+config:
+  target: 'http://localhost:3000'
+  phases:
+    - duration: 120
+      arrivalRate: 20
+      name: "Ramp up"
+    - duration: 300
+      arrivalRate: 100
+      name: "Target load - 1000+ req/min"
+    - duration: 180
+      arrivalRate: 150
+      name: "Stress test"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  payload:
+    path: "./stake-payloads.csv"
+    fields:
+      - "agentWallet"
+      - "stakeAmount"
+
+scenarios:
+  - name: "Stake Transaction Builder"
+    weight: 100
+    flow:
+      - post:
+          url: "/stake/build"
+          json:
+            agentWallet: "{{ agentWallet }}"
+            stakeAmount: "{{ stakeAmount }}"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: "success"
+            - property: "success"
+              equals: true
+      - think: 
+          min: 1
+          max: 3

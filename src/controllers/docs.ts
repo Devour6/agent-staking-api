@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import { asyncHandler, createApiResponse } from '@/middleware/errorHandler';
 import { config } from '@/services/config';
+import fs from 'fs';
+import path from 'path';
+import yaml from 'js-yaml';
 
 interface ApiDocumentation {
   title: string;
@@ -135,59 +138,59 @@ export const getApiDocumentation = asyncHandler(
 );
 
 /**
- * API specification in OpenAPI format (placeholder)
+ * API specification in OpenAPI format
  * GET /api/docs/openapi
  */
 export const getOpenApiSpec = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    // Placeholder for OpenAPI 3.0 specification
-    const openApiSpec = {
-      openapi: '3.0.0',
-      info: {
-        title: 'Phase Agent Staking API',
-        version: '1.0.0',
-        description: 'Non-custodial transaction builder service for AI agents',
-      },
-      servers: [
-        {
-          url: `${req.protocol}://${req.get('host')}`,
-          description: 'Production server',
+    try {
+      const openApiPath = path.join(__dirname, '../../docs/openapi.yaml');
+      const yamlContent = fs.readFileSync(openApiPath, 'utf8');
+      const openApiSpec = yaml.load(yamlContent) as any;
+      
+      // Update server URL to match current request
+      if (openApiSpec.servers) {
+        const currentServerUrl = `${req.protocol}://${req.get('host')}`;
+        const currentServer = {
+          url: currentServerUrl,
+          description: req.get('host')?.includes('localhost') ? 'Development server' : 'Current server'
+        };
+        
+        // Add current server to the beginning of servers array
+        openApiSpec.servers = [currentServer, ...openApiSpec.servers.filter((s: any) => s.url !== currentServerUrl)];
+      }
+      
+      res.json(openApiSpec);
+    } catch (error) {
+      // Fallback OpenAPI spec if file reading fails
+      const fallbackSpec = {
+        openapi: '3.0.3',
+        info: {
+          title: 'Phase Agent Staking API',
+          version: '1.0.0',
+          description: 'Non-custodial transaction builder service for AI agents',
         },
-      ],
-      components: {
-        securitySchemes: {
-          ApiKeyAuth: {
-            type: 'apiKey',
-            in: 'header',
-            name: 'Authorization',
+        servers: [
+          {
+            url: `${req.protocol}://${req.get('host')}`,
+            description: 'Current server',
           },
-        },
-      },
-      paths: {
-        '/health': {
-          get: {
-            summary: 'Health check',
-            responses: {
-              '200': {
-                description: 'System is healthy',
+        ],
+        paths: {
+          '/health': {
+            get: {
+              summary: 'Health check',
+              responses: {
+                '200': {
+                  description: 'System is healthy',
+                },
               },
             },
           },
         },
-        '/stake/build': {
-          post: {
-            summary: 'Build native staking transaction',
-            security: [{ ApiKeyAuth: [] }],
-            responses: {
-              '200': {
-                description: 'Transaction built successfully',
-              },
-            },
-          },
-        },
-      },
-    };
-
-    res.json(openApiSpec);
+      };
+      
+      res.json(fallbackSpec);
+    }
   }
 );

@@ -1,39 +1,69 @@
 import { Connection, PublicKey, Commitment, BlockhashWithExpiryBlockHeight } from '@solana/web3.js';
 import { config } from './config';
 import { logger } from './logger';
+import { metricsService } from './metrics';
 
 class SolanaService {
-  private connection: Connection;
-  private backupConnection?: Connection;
+  private connectionPool: Connection[] = [];
+  private backupConnectionPool: Connection[] = [];
+  private currentConnectionIndex = 0;
   private cachedBlockhash: BlockhashWithExpiryBlockHeight | null = null;
   private blockhashCacheMs = 30000; // 30 seconds
   private lastBlockhashFetch = 0;
+  private poolSize = 5; // Number of connections in the pool
 
   constructor() {
-    this.connection = new Connection(config.solana.rpcUrl, {
-      commitment: 'confirmed' as Commitment,
-      confirmTransactionInitialTimeout: 30000,
-    });
-
-    if (config.solana.rpcUrlBackup) {
-      this.backupConnection = new Connection(config.solana.rpcUrlBackup, {
+    // Create connection pool for better performance
+    for (let i = 0; i < this.poolSize; i++) {
+      const connection = new Connection(config.solana.rpcUrl, {
         commitment: 'confirmed' as Commitment,
         confirmTransactionInitialTimeout: 30000,
+        httpAgent: false, // Use native fetch for better connection reuse
       });
+      this.connectionPool.push(connection);
     }
 
-    logger.info('Solana service initialized', {
+    // Create backup connection pool if backup URL provided
+    if (config.solana.rpcUrlBackup) {
+      for (let i = 0; i < this.poolSize; i++) {
+        const backupConnection = new Connection(config.solana.rpcUrlBackup, {
+          commitment: 'confirmed' as Commitment,
+          confirmTransactionInitialTimeout: 30000,
+          httpAgent: false,
+        });
+        this.backupConnectionPool.push(backupConnection);
+      }
+    }
+
+    logger.info('Solana service initialized with connection pooling', {
       rpcUrl: config.solana.rpcUrl,
       cluster: config.solana.cluster,
-      hasBackup: !!this.backupConnection,
+      poolSize: this.poolSize,
+      hasBackup: this.backupConnectionPool.length > 0,
     });
   }
 
   /**
-   * Get primary connection with fallback to backup
+   * Get connection from pool using round-robin
    */
   getConnection(): Connection {
-    return this.connection;
+    const connection = this.connectionPool[this.currentConnectionIndex];
+    if (!connection) {
+      throw new Error('No connections available in pool');
+    }
+    this.currentConnectionIndex = (this.currentConnectionIndex + 1) % this.poolSize;
+    return connection;
+  }
+
+  /**
+   * Get backup connection from pool using round-robin
+   */
+  private getBackupConnection(): Connection | null {
+    if (this.backupConnectionPool.length === 0) {
+      return null;
+    }
+    const connection = this.backupConnectionPool[this.currentConnectionIndex % this.backupConnectionPool.length];
+    return connection || null;
   }
 
   /**
@@ -48,32 +78,60 @@ class SolanaService {
     }
 
     try {
-      // Try primary connection first
-      this.cachedBlockhash = await this.connection.getLatestBlockhash('confirmed');
+      // Try primary connection pool
+      const primaryConnection = this.getConnection();
+      const rpcStartTime = Date.now();
+      
+      this.cachedBlockhash = await primaryConnection.getLatestBlockhash('confirmed');
       this.lastBlockhashFetch = now;
       
-      logger.debug('Fetched fresh blockhash', {
+      const rpcDuration = Date.now() - rpcStartTime;
+      
+      // Track metrics
+      metricsService.trackSolanaRpcCall('getLatestBlockhash', true, rpcDuration);
+      
+      logger.logSolanaRpcCall('getLatestBlockhash', true, rpcDuration, {
         blockhash: this.cachedBlockhash.blockhash,
         lastValidBlockHeight: this.cachedBlockhash.lastValidBlockHeight,
+        cacheHit: false,
       });
       
       return this.cachedBlockhash;
     } catch (error) {
-      logger.warn('Primary RPC failed, trying backup', { error: (error as Error).message });
+      const errorMessage = (error as Error).message;
+      metricsService.trackSolanaRpcCall('getLatestBlockhash', false, 0);
       
-      // Try backup connection
-      if (this.backupConnection) {
+      logger.warn('Primary RPC failed, trying backup', { 
+        error: errorMessage,
+        rpcMethod: 'getLatestBlockhash',
+      });
+      
+      // Try backup connection pool
+      const backupConnection = this.getBackupConnection();
+      if (backupConnection) {
         try {
-          this.cachedBlockhash = await this.backupConnection.getLatestBlockhash('confirmed');
+          const backupStartTime = Date.now();
+          this.cachedBlockhash = await backupConnection.getLatestBlockhash('confirmed');
           this.lastBlockhashFetch = now;
           
-          logger.info('Fetched blockhash from backup RPC', {
+          const backupDuration = Date.now() - backupStartTime;
+          
+          // Track backup metrics
+          metricsService.trackSolanaRpcCall('getLatestBlockhash_backup', true, backupDuration);
+          
+          logger.logSolanaRpcCall('getLatestBlockhash_backup', true, backupDuration, {
             blockhash: this.cachedBlockhash.blockhash,
+            failoverReason: errorMessage,
           });
           
           return this.cachedBlockhash;
         } catch (backupError) {
-          logger.error('Backup RPC also failed', { error: (backupError as Error).message });
+          metricsService.trackSolanaRpcCall('getLatestBlockhash_backup', false, 0);
+          logger.error('Backup RPC also failed', { 
+            error: (backupError as Error).message,
+            originalError: errorMessage,
+            rpcMethod: 'getLatestBlockhash_backup',
+          });
         }
       }
       
@@ -100,7 +158,8 @@ class SolanaService {
     try {
       // Stake account size is 200 bytes
       const stakeAccountSize = 200;
-      const rentExemption = await this.connection.getMinimumBalanceForRentExemption(stakeAccountSize);
+      const connection = this.getConnection();
+      const rentExemption = await connection.getMinimumBalanceForRentExemption(stakeAccountSize);
       
       logger.debug('Fetched stake account minimum rent', { rentExemption });
       
@@ -117,7 +176,8 @@ class SolanaService {
    */
   async getEpochInfo() {
     try {
-      const epochInfo = await this.connection.getEpochInfo();
+      const connection = this.getConnection();
+      const epochInfo = await connection.getEpochInfo();
       
       logger.debug('Fetched epoch info', {
         epoch: epochInfo.epoch,
@@ -152,9 +212,10 @@ class SolanaService {
     const startTime = Date.now();
     
     try {
-      // Simple slot check to verify connection
+      // Simple slot check to verify connection using pool
+      const connection = this.getConnection();
       await Promise.race([
-        this.connection.getSlot(),
+        connection.getSlot(),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Health check timeout')), config.healthCheck.timeoutMs)
         )
@@ -162,13 +223,26 @@ class SolanaService {
       
       const latency = Date.now() - startTime;
       
-      logger.debug('Solana health check passed', { latency });
+      // Track successful health check
+      metricsService.trackSolanaRpcCall('getSlot_health', true, latency);
+      
+      logger.logSolanaRpcCall('getSlot_health', true, latency, {
+        healthCheck: true,
+        poolIndex: this.currentConnectionIndex,
+      });
       
       return { healthy: true, latency };
     } catch (error) {
       const errorMessage = (error as Error).message;
+      const duration = Date.now() - startTime;
       
-      logger.error('Solana health check failed', { error: errorMessage });
+      // Track failed health check
+      metricsService.trackSolanaRpcCall('getSlot_health', false, duration);
+      
+      logger.logSolanaRpcCall('getSlot_health', false, duration, {
+        healthCheck: true,
+        error: errorMessage,
+      });
       
       return { healthy: false, error: errorMessage };
     }
@@ -179,7 +253,8 @@ class SolanaService {
    */
   async getValidatorInfo(voteAccount: string) {
     try {
-      const validators = await this.connection.getVoteAccounts();
+      const connection = this.getConnection();
+      const validators = await connection.getVoteAccounts();
       const validator = validators.current.find(v => v.votePubkey === voteAccount) ||
                       validators.delinquent.find(v => v.votePubkey === voteAccount);
       
