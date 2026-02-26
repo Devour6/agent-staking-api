@@ -1,0 +1,164 @@
+version: '3.8'
+
+services:
+  # Agent Staking API - Devnet Configuration
+  agent-staking-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: agent-staking-api-devnet
+    ports:
+      - "3000:3000"
+      - "9090:9090"  # Metrics endpoint
+    env_file:
+      - .env.devnet
+    environment:
+      - NODE_ENV=development
+      - SOLANA_CLUSTER=devnet
+      - SOLANA_RPC_URL=https://api.devnet.solana.com
+      - API_BASE_URL=http://localhost:3000
+    volumes:
+      - ./logs:/app/logs
+      - ./devnet-test-keypair.json:/app/devnet-test-keypair.json:ro
+    restart: unless-stopped
+    networks:
+      - devnet-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - redis
+      - prometheus
+
+  # Redis for caching validator data
+  redis:
+    image: redis:7-alpine
+    container_name: redis-devnet
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - devnet-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus-devnet
+    ports:
+      - "9091:9090"  # Use 9091 to avoid conflicts
+    volumes:
+      - ./monitoring/prometheus.devnet.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - devnet-network
+    depends_on:
+      - agent-staking-api
+
+  # Grafana for metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana-devnet
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=devnet-admin-password
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SECURITY_DISABLE_GRAVATAR=true
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./monitoring/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./monitoring/dashboards:/var/lib/grafana/dashboards:ro
+    restart: unless-stopped
+    networks:
+      - devnet-network
+    depends_on:
+      - prometheus
+
+  # Nginx reverse proxy for production-like setup
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-devnet
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./nginx/devnet.conf:/etc/nginx/conf.d/default.conf:ro
+      - nginx-logs:/var/log/nginx
+    restart: unless-stopped
+    networks:
+      - devnet-network
+    depends_on:
+      - agent-staking-api
+
+  # Test runner for automated E2E testing
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    container_name: test-runner-devnet
+    environment:
+      - API_BASE_URL=http://agent-staking-api:3000
+      - TEST_KEYPAIR_PATH=/app/devnet-test-keypair.json
+      - SOLANA_RPC_URL=https://api.devnet.solana.com
+      - RUN_E2E_TESTS=true
+    volumes:
+      - ./devnet-test-keypair.json:/app/devnet-test-keypair.json:ro
+      - ./test-results:/app/test-results
+    networks:
+      - devnet-network
+    depends_on:
+      agent-staking-api:
+        condition: service_healthy
+    profiles:
+      - testing  # Only run when explicitly requested
+    command: ["npm", "run", "test:e2e:devnet"]
+
+networks:
+  devnet-network:
+    driver: bridge
+    name: agent-staking-devnet
+
+volumes:
+  redis-data:
+    name: agent-staking-redis-devnet
+  prometheus-data:
+    name: agent-staking-prometheus-devnet
+  grafana-data:
+    name: agent-staking-grafana-devnet
+  nginx-logs:
+    name: agent-staking-nginx-logs-devnet
+
+# Health check and monitoring endpoints:
+# - API Health: http://localhost:3000/health
+# - API Metrics: http://localhost:3000/metrics
+# - Prometheus: http://localhost:9091
+# - Grafana: http://localhost:3001 (admin/devnet-admin-password)
+# - Nginx Proxy: http://localhost:8080
+#
+# To run E2E tests:
+# docker-compose -f docker-compose.devnet.yml --profile testing up test-runner
+#
+# To run just the API stack:
+# docker-compose -f docker-compose.devnet.yml up -d

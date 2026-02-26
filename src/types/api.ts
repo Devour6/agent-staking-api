@@ -74,7 +74,7 @@ export interface ValidatorInfo {
   commission: number;
   apy: number;
   isPhaseValidator: boolean;
-  health: 'excellent' | 'good' | 'fair';
+  health: 'excellent' | 'good' | 'fair' | 'poor';
 }
 
 export interface StakeRecommendationResponse {
@@ -92,6 +92,17 @@ export interface StakeRecommendationResponse {
       isPhasePool: boolean;
     }[];
     featured: string;             // Phase pool identifier
+  };
+  analytics?: {
+    dataSource: string;           // 'validator-analytics-api' | 'static-fallback'
+    lastUpdated: string;          // ISO timestamp
+    averageAPY: number;           // Average APY across recommended validators
+    totalValidatorsAnalyzed: number;
+    cacheStatus: {
+      isCached: boolean;
+      age: number;
+      remainingMs: number;
+    };
   };
 }
 
