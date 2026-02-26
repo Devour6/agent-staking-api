@@ -19,6 +19,7 @@ import {
 import { solanaService } from './solana';
 import { config } from './config';
 import { logger } from './logger';
+import { validatorAnalyticsService } from './validatorAnalytics';
 import { 
   NativeStakeRequest, 
   NativeStakeResponse, 
@@ -446,49 +447,33 @@ class TransactionService {
   }
 
   /**
-   * Get staking recommendations
+   * Get staking recommendations using live validator analytics
    */
   async getStakeRecommendations(): Promise<StakeRecommendationResponse> {
     const startTime = Date.now();
     
     try {
-      // Get Phase validator info (featured)
-      const phaseValidator: ValidatorInfo = {
-        voteAccount: this.phaseValidatorVoteAccount.toString(),
-        name: 'Phase Validator',
-        commission: 5, // 5% commission
-        apy: 7.2,
-        isPhaseValidator: true,
-        health: 'excellent',
-      };
+      logger.info('Fetching live validator recommendations from analytics API');
       
-      // Mock additional validators for diversity
-      const otherValidators: ValidatorInfo[] = [
-        {
-          voteAccount: 'Validator2VoteAccount1111111111111111111111',
-          name: 'Solana Foundation Validator',
-          commission: 7,
-          apy: 6.8,
-          isPhaseValidator: false,
-          health: 'excellent',
-        },
-        {
-          voteAccount: 'Validator3VoteAccount1111111111111111111111',
-          name: 'RPC Pool Validator',
-          commission: 6,
-          apy: 6.9,
-          isPhaseValidator: false,
-          health: 'good',
-        },
-      ];
+      // Get live validator recommendations from analytics service
+      const liveValidators = await validatorAnalyticsService.getRecommendedValidators(10);
       
       // Get YIELD pool info
       const yieldPoolInfo = await this.getYieldStakePoolInfo();
       
+      // Calculate recommended allocation based on market conditions
+      const averageNativeAPY = liveValidators.reduce((sum, v) => sum + v.apy, 0) / liveValidators.length;
+      const liquidAPY = yieldPoolInfo.apy;
+      
+      // Recommend higher allocation to whichever has better yield, but cap at 80%
+      const nativeAllocation = Math.min(80, Math.max(20, 
+        averageNativeAPY > liquidAPY ? 70 : 50
+      ));
+      
       const response: StakeRecommendationResponse = {
         native: {
-          validators: [phaseValidator, ...otherValidators],
-          recommendedAllocation: 70, // 70% to native staking
+          validators: liveValidators,
+          recommendedAllocation: nativeAllocation,
         },
         liquid: {
           pools: [
@@ -503,14 +488,24 @@ class TransactionService {
           ],
           featured: 'Phase YIELD Pool',
         },
+        analytics: {
+          dataSource: 'validator-analytics-api',
+          lastUpdated: new Date().toISOString(),
+          averageAPY: averageNativeAPY,
+          totalValidatorsAnalyzed: liveValidators.length,
+          cacheStatus: validatorAnalyticsService.getCacheStatus()
+        }
       };
       
       const processingTime = Date.now() - startTime;
       
-      logger.info('Stake recommendations generated', {
+      logger.info('Live stake recommendations generated', {
         nativeValidators: response.native.validators.length,
         liquidPools: response.liquid.pools.length,
+        averageAPY: averageNativeAPY.toFixed(2),
+        recommendedNativeAllocation: nativeAllocation,
         processingTimeMs: processingTime,
+        dataSource: 'validator-analytics-api'
       });
 
       return response;
@@ -518,13 +513,78 @@ class TransactionService {
     } catch (error) {
       const processingTime = Date.now() - startTime;
       
-      logger.error('Failed to get stake recommendations', {
+      logger.error('Failed to get live stake recommendations, falling back to static data', {
         error: (error as Error).message,
         processingTimeMs: processingTime,
       });
       
-      throw error;
+      // Fallback to basic recommendations if analytics service fails
+      return this.getStaticStakeRecommendations();
     }
+  }
+
+  /**
+   * Fallback static recommendations when analytics service is unavailable
+   */
+  private async getStaticStakeRecommendations(): Promise<StakeRecommendationResponse> {
+    logger.warn('Using static fallback recommendations');
+    
+    // Static validator list as fallback
+    const staticValidators: ValidatorInfo[] = [
+      {
+        voteAccount: this.phaseValidatorVoteAccount.toString(),
+        name: 'Phase Validator',
+        commission: 5,
+        apy: 7.2,
+        isPhaseValidator: true,
+        health: 'excellent',
+      },
+      {
+        voteAccount: 'CertusDeBmqN8ZawdkxK5kFGMwBXdudvWLSGq6UKHLVa',
+        name: 'Certus One',
+        commission: 7,
+        apy: 6.8,
+        isPhaseValidator: false,
+        health: 'excellent',
+      },
+      {
+        voteAccount: '9QU2QSxhb24FUX3Tu2FpczXjpK3VYrvRudywSgW5kP8M',
+        name: 'Staking Fund',
+        commission: 6,
+        apy: 6.9,
+        isPhaseValidator: false,
+        health: 'good',
+      },
+    ];
+    
+    const yieldPoolInfo = await this.getYieldStakePoolInfo();
+    
+    return {
+      native: {
+        validators: staticValidators,
+        recommendedAllocation: 70,
+      },
+      liquid: {
+        pools: [
+          {
+            name: 'Phase YIELD Pool',
+            token: '$YIELD',
+            mint: config.phase.yieldStakePoolMint,
+            apy: yieldPoolInfo.apy,
+            tvl: yieldPoolInfo.tvl,
+            isPhasePool: true,
+          },
+        ],
+        featured: 'Phase YIELD Pool',
+      },
+      analytics: {
+        dataSource: 'static-fallback',
+        lastUpdated: new Date().toISOString(),
+        averageAPY: 6.8,
+        totalValidatorsAnalyzed: staticValidators.length,
+        cacheStatus: { isCached: false, age: 0, remainingMs: 0 }
+      }
+    };
   }
 
   /**

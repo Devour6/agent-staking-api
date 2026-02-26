@@ -93,6 +93,17 @@ export interface StakeRecommendationResponse {
     }[];
     featured: string;             // Phase pool identifier
   };
+  analytics?: {
+    dataSource: string;           // 'validator-analytics-api' | 'static-fallback'
+    lastUpdated: string;          // ISO timestamp
+    averageAPY: number;           // Average APY across recommended validators
+    totalValidatorsAnalyzed: number;
+    cacheStatus: {
+      isCached: boolean;
+      age: number;
+      remainingMs: number;
+    };
+  };
 }
 
 export interface StakeAccount {

@@ -1,0 +1,67 @@
+# Prometheus Configuration for Agent Staking API - Devnet
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: 'devnet'
+    service: 'agent-staking-api'
+
+rule_files:
+  # - "alert_rules.yml"
+
+scrape_configs:
+  # Agent Staking API Metrics
+  - job_name: 'agent-staking-api'
+    static_configs:
+      - targets: ['agent-staking-api:3000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    honor_labels: true
+    params:
+      format: ['prometheus']
+
+  # Node.js Application Metrics
+  - job_name: 'nodejs-app-metrics'
+    static_configs:
+      - targets: ['agent-staking-api:9090']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Redis Metrics (if redis-exporter is added later)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+
+  # Prometheus Self-Monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+
+  # Container Health Monitoring
+  - job_name: 'docker-health'
+    static_configs:
+      - targets: ['agent-staking-api:3000']
+    metrics_path: '/health'
+    scrape_interval: 30s
+    honor_labels: true
+
+# Alert Manager Configuration (if alerts are needed)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - "alertmanager:9093"
+
+# Storage Configuration
+storage:
+  tsdb:
+    retention.time: 7d
+    retention.size: 1GB
+
+# Web Configuration
+web:
+  enable_lifecycle: true
+  enable_admin_api: true
