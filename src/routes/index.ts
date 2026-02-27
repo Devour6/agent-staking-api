@@ -16,6 +16,12 @@ import {
   deleteWebhook,
   getWebhookDeliveries
 } from '@/controllers/webhook';
+import {
+  registerAgent,
+  getAgentProfile,
+  updateAgentProfile,
+  acceptTerms
+} from '@/controllers/agent';
 import { 
   healthCheck, 
   livenessCheck, 
@@ -162,6 +168,37 @@ router.get(
   '/webhooks/:id/deliveries',
   readOnlyRateLimit,
   getWebhookDeliveries
+);
+
+// Agent endpoints (no auth required for registration)
+router.post(
+  '/agents/register',
+  readOnlyRateLimit,
+  validateRequest(validationSchemas.registerAgentRequest),
+  registerAgent
+);
+
+// Protected agent endpoints (require authentication)
+router.get(
+  '/agents/:agentId',
+  authenticateApiKey,
+  readOnlyRateLimit,
+  getAgentProfile
+);
+
+router.put(
+  '/agents/:agentId',
+  authenticateApiKey,
+  readOnlyRateLimit,
+  validateRequest(validationSchemas.updateAgentRequest),
+  updateAgentProfile
+);
+
+router.post(
+  '/agents/:agentId/agree',
+  authenticateApiKey,
+  readOnlyRateLimit,
+  acceptTerms
 );
 
 export default router;

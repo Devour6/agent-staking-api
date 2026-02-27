@@ -139,6 +139,58 @@ export const validationSchemas = {
       .optional()
       .description('Stake amount in lamports'),
   }),
+
+  // Agent validation schemas
+  registerAgentRequest: Joi.object({
+    name: Joi.string()
+      .pattern(/^[a-zA-Z0-9][a-zA-Z0-9\s\-_\.]{1,48}[a-zA-Z0-9]$/)
+      .required()
+      .description('Agent name (2-50 chars, alphanumeric, spaces, hyphens, underscores, dots)'),
+    description: Joi.string()
+      .min(1)
+      .max(500)
+      .required()
+      .description('Agent description (max 500 chars)'),
+    callbackUrl: Joi.string()
+      .uri({ scheme: ['https'] })
+      .optional()
+      .description('Optional HTTPS callback URL'),
+    tierPreference: Joi.string()
+      .valid('basic', 'standard', 'premium')
+      .required()
+      .description('Preferred agent tier'),
+  }),
+
+  updateAgentRequest: Joi.object({
+    description: Joi.string()
+      .min(1)
+      .max(500)
+      .optional()
+      .description('Updated agent description (max 500 chars)'),
+    callbackUrl: Joi.string()
+      .uri({ scheme: ['https'] })
+      .optional()
+      .allow('')
+      .description('Updated HTTPS callback URL (empty string to remove)'),
+    tierUpgradeRequest: Joi.string()
+      .valid('basic', 'standard', 'premium')
+      .optional()
+      .description('Requested tier upgrade'),
+  }),
+
+  acceptTermsRequest: Joi.object({
+    agentId: Joi.string()
+      .pattern(/^agent_[a-z0-9_]+$/)
+      .required()
+      .description('Agent ID'),
+    termsVersion: Joi.string()
+      .optional()
+      .description('Terms version (optional, defaults to current)'),
+    agreedAt: Joi.string()
+      .isoDate()
+      .optional()
+      .description('Agreement timestamp (optional, defaults to now)'),
+  }),
 };
 
 /**
