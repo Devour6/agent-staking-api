@@ -63,17 +63,14 @@ describe('Admin Controller', () => {
       ];
 
       mockApiKeyManager.listKeys.mockResolvedValue(mockKeys);
+      (mockApiKeyManager as any).getActiveKeyCount = jest.fn().mockResolvedValue(1);
 
       const req = createMockReq();
       const res = createMockRes();
 
       const next = jest.fn() as NextFunction;
-      await getApiKeys(req, res, next);
-
-      // Check if there was an error passed to next()
-      if ((next as jest.Mock).mock.calls.length > 0) {
-        console.error('Error in getApiKeys:', (next as jest.Mock).mock.calls[0][0]);
-      }
+      getApiKeys(req, res, next);
+      await new Promise(resolve => setImmediate(resolve));
 
       expect(next).not.toHaveBeenCalled(); // Should not have errors
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
@@ -137,7 +134,8 @@ describe('Admin Controller', () => {
       const res = createMockRes();
 
       const next = jest.fn() as NextFunction;
-      await createApiKey(req, res, next);
+      createApiKey(req, res, next);
+      await new Promise(resolve => setImmediate(resolve));
       
       // With asyncHandler, errors are passed to next(), not thrown directly
       expect(next).toHaveBeenCalledWith(expect.objectContaining({
@@ -177,15 +175,10 @@ describe('Admin Controller', () => {
       const res = createMockRes();
 
       const next = jest.fn() as NextFunction;
-      await revokeApiKey(req, res, next);
+      revokeApiKey(req, res, next);
       
-      // Check what actually happened
-      if ((next as jest.Mock).mock.calls.length > 0) {
-        console.log('next() was called with:', (next as jest.Mock).mock.calls[0][0]);
-      }
-      if ((res.json as jest.Mock).mock.calls.length > 0) {
-        console.log('res.json() was called with:', (res.json as jest.Mock).mock.calls[0][0]);
-      }
+      // asyncHandler returns void (not Promise), so we need to flush microtasks
+      await new Promise(resolve => setImmediate(resolve));
       
       // With asyncHandler, errors are passed to next(), not thrown directly
       expect(next).toHaveBeenCalledWith(expect.objectContaining({
