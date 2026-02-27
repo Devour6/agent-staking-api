@@ -5,7 +5,10 @@ import {
   buildLiquidStakeTransaction, 
   buildUnstakeTransaction,
   buildAndMonitorStakeTransaction,
-  monitorStakeTransaction
+  monitorStakeTransaction,
+  submitTransaction,
+  getStakeRecommendations,
+  getAgentPositions
 } from '@/controllers/stake';
 import {
   registerWebhook,
@@ -107,6 +110,32 @@ router.post(
   tieredRateLimit,
   validateRequest(validationSchemas.monitorStakeRequest),
   monitorStakeTransaction
+);
+
+// Transaction submission endpoint
+router.post(
+  '/tx/submit',
+  authenticateApiKey,
+  extractAgentWallet,
+  tieredRateLimit,
+  validateRequest(validationSchemas.transactionSubmitRequest),
+  submitTransaction
+);
+
+// Staking recommendations endpoint
+router.get(
+  '/stake/recommend',
+  authenticateApiKey,
+  readOnlyRateLimit,
+  getStakeRecommendations
+);
+
+// Agent positions endpoint
+router.get(
+  '/positions/:wallet',
+  authenticateApiKey,
+  readOnlyRateLimit,
+  getAgentPositions
 );
 
 // Webhook endpoints

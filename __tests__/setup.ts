@@ -11,8 +11,28 @@ process.env.RATE_LIMIT_WINDOW_MS = '60000';
 
 import { stakeMonitoringService } from '../src/services/monitoring';
 import { webhookDeliveryService } from '../src/services/webhookDelivery';
+import { apiKeyManager } from '../src/services/apiKeyManager';
 
 // Jest setup for all tests
+
+// Set up test API keys
+beforeAll(async () => {
+  // Create the second test API key for multi-user testing
+  // We need to directly add it to the manager since createKey doesn't support custom keys
+  const otherApiKey = 'b'.repeat(64);
+  const hashedKey = (apiKeyManager as any).hashKey(otherApiKey);
+  
+  (apiKeyManager as any).keys.set('test-key-b', {
+    keyId: 'test-key-b',
+    hashedKey: hashedKey,
+    createdAt: new Date(),
+    lastUsed: undefined,
+    isActive: true,
+    rotationScheduledAt: undefined,
+    tier: 'free',
+    description: 'Test API Key B'
+  });
+});
 
 // Prevent monitoring services from starting during tests
 jest.spyOn(stakeMonitoringService, 'startMonitoring').mockImplementation(() => {

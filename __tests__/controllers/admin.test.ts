@@ -70,6 +70,12 @@ describe('Admin Controller', () => {
       const next = jest.fn() as NextFunction;
       await getApiKeys(req, res, next);
 
+      // Check if there was an error passed to next()
+      if ((next as jest.Mock).mock.calls.length > 0) {
+        console.error('Error in getApiKeys:', (next as jest.Mock).mock.calls[0][0]);
+      }
+
+      expect(next).not.toHaveBeenCalled(); // Should not have errors
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
         success: true,
         data: expect.objectContaining({
@@ -131,7 +137,12 @@ describe('Admin Controller', () => {
       const res = createMockRes();
 
       const next = jest.fn() as NextFunction;
-      await expect(createApiKey(req, res, next)).rejects.toThrow('Invalid tier');
+      await createApiKey(req, res, next);
+      
+      // With asyncHandler, errors are passed to next(), not thrown directly
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({
+        message: expect.stringContaining('Invalid tier')
+      }));
     });
   });
 
@@ -166,7 +177,20 @@ describe('Admin Controller', () => {
       const res = createMockRes();
 
       const next = jest.fn() as NextFunction;
-      await expect(revokeApiKey(req, res, next)).rejects.toThrow('API key not found');
+      await revokeApiKey(req, res, next);
+      
+      // Check what actually happened
+      if ((next as jest.Mock).mock.calls.length > 0) {
+        console.log('next() was called with:', (next as jest.Mock).mock.calls[0][0]);
+      }
+      if ((res.json as jest.Mock).mock.calls.length > 0) {
+        console.log('res.json() was called with:', (res.json as jest.Mock).mock.calls[0][0]);
+      }
+      
+      // With asyncHandler, errors are passed to next(), not thrown directly
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({
+        message: expect.stringContaining('API key not found')
+      }));
     });
   });
 });

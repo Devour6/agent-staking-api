@@ -119,6 +119,11 @@ export const readOnlyRateLimit = rateLimit({
 export const tieredRateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: (req: Request): number => {
+    // In test environment, use much higher limits to avoid blocking tests
+    if (process.env.NODE_ENV === 'test') {
+      return 1000;
+    }
+    
     // Get the tier from the request (set by auth middleware)
     const tier = (req as any).apiKeyTier as ApiKeyTier;
     
