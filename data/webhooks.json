@@ -61,5 +61,31 @@
     "active": true,
     "createdAt": "2026-02-27T11:38:48.424Z",
     "failureCount": 0
+  },
+  {
+    "id": "1ee2be47972cb5990da88ff3739e1748",
+    "apiKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "url": "https://example.com/webhook",
+    "events": [
+      "stake_confirmed",
+      "stake_activated"
+    ],
+    "secret": "4dcf294c61ac1337a7a48542a0a4353f46341c67caf8900e7668318dd65d7bc7",
+    "active": true,
+    "createdAt": "2026-02-27T16:33:48.084Z",
+    "failureCount": 0
+  },
+  {
+    "id": "38ddaf0b5d1c303c94fd2c132e9d5e6a",
+    "apiKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "url": "https://default-events.example.com/webhook",
+    "events": [
+      "stake_confirmed",
+      "stake_activated"
+    ],
+    "secret": "8e2fc0e20d9da526f638f19351db4898d17af285300e40b1a80976b169e48e0b",
+    "active": true,
+    "createdAt": "2026-02-27T16:33:48.285Z",
+    "failureCount": 0
   }
 ]
