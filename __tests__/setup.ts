@@ -5,8 +5,12 @@ process.env.SOLANA_CLUSTER = 'mainnet-beta';
 process.env.PHASE_FEE_WALLET = '11111111111111111111111111111112';
 process.env.PHASE_VALIDATOR_VOTE_ACCOUNT = '11111111111111111111111111111113';
 process.env.API_KEY_SECRET = 'a'.repeat(64);
+// Increase rate limits for tests to prevent 429 errors
+process.env.RATE_LIMIT_MAX_REQUESTS = '1000';
+process.env.RATE_LIMIT_WINDOW_MS = '60000';
 
 import { stakeMonitoringService } from '../src/services/monitoring';
+import { webhookDeliveryService } from '../src/services/webhookDelivery';
 
 // Jest setup for all tests
 
@@ -19,31 +23,54 @@ jest.spyOn(stakeMonitoringService, 'startValidatorMonitoring').mockImplementatio
   return {} as any; // Return mock timeout
 });
 
-// Mock setTimeout to prevent background timers in tests
+// Mock webhook retry processor to prevent background timers in tests
+jest.spyOn(webhookDeliveryService, 'startRetryProcessor').mockImplementation(() => {
+  // Return a mock timer that we can track
+  const mockTimer = { unref: () => {}, [Symbol.toPrimitive]: () => 1 } as any;
+  return mockTimer;
+});
+
+// Track all intervals and timeouts created during tests
 const originalSetInterval = global.setInterval;
+const originalSetTimeout = global.setTimeout;
 const intervals: NodeJS.Timeout[] = [];
+const timeouts: NodeJS.Timeout[] = [];
 
 global.setInterval = ((callback: any, ms?: number) => {
   const interval = originalSetInterval(callback, ms || 0);
+  interval.unref(); // Prevent hanging
   intervals.push(interval);
   return interval;
 }) as any;
 
-afterAll(async () => {
-  // Clean up intervals
-  intervals.forEach(interval => clearInterval(interval));
-  
-  // Force cleanup of any open handles
-  await new Promise(resolve => setTimeout(resolve, 100));
-});
+global.setTimeout = ((callback: any, ms?: number) => {
+  const timeout = originalSetTimeout(callback, ms || 0);
+  timeout.unref(); // Prevent hanging
+  timeouts.push(timeout);
+  return timeout;
+}) as any;
 
-// Global test teardown for each test file
+// Clean up all timers after each test
 afterEach(async () => {
+  intervals.forEach(interval => clearInterval(interval));
+  timeouts.forEach(timeout => clearTimeout(timeout));
+  intervals.length = 0;
+  timeouts.length = 0;
+  
   // Clear any timers that may have been set during tests
   jest.clearAllTimers();
   
   // Small delay to allow connections to cleanup
   await new Promise(resolve => setTimeout(resolve, 50));
+});
+
+// Final cleanup after all tests
+afterAll(async () => {
+  intervals.forEach(interval => clearInterval(interval));
+  timeouts.forEach(timeout => clearTimeout(timeout));
+  
+  // Force cleanup of any open handles
+  await new Promise(resolve => setTimeout(resolve, 100));
 });
 
 // Set longer timeout for integration tests

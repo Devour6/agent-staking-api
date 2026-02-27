@@ -27,7 +27,6 @@ module.exports = {
   },
   testTimeout: 30000,
   verbose: true,
-  forceExit: true,
   clearMocks: true,
   detectOpenHandles: false, // Temporarily disabled while we focus on feature completion
   detectLeaks: false,
