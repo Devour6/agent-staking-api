@@ -200,6 +200,7 @@ export const getAdminDashboard = asyncHandler(
 </html>`;
     
     res.setHeader('Content-Type', 'text/html');
+    res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; object-src 'none'; frame-ancestors 'none'");
     res.send(html);
   }
 );

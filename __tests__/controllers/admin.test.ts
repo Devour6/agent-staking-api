@@ -13,13 +13,6 @@ import {
 // Mock dependencies
 jest.mock('../../src/services/apiKeyManager');
 jest.mock('../../src/services/logger');
-jest.mock('prom-client', () => ({
-  default: {
-    register: {
-      metrics: jest.fn().mockResolvedValue('# Mocked metrics\nhttp_requests_total{} 100\n')
-    }
-  }
-}));
 
 const mockApiKeyManager = apiKeyManager as jest.Mocked<typeof apiKeyManager>;
 

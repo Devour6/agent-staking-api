@@ -54,13 +54,16 @@ describe('escapeHtmlAttribute', () => {
   });
 
   it('should be more restrictive than basic escapeHtml', () => {
-    const input = `href="/path" onclick="evil()"`;
+    const input = `href="/path" onclick="evil()" data='test'\n`;
     const basic = escapeHtml(input);
     const attribute = escapeHtmlAttribute(input);
     
-    // George's implementation includes line ending escaping for Windows
+    // Both should escape quotes
     expect(attribute).toContain('&quot;');
     expect(attribute).toContain('&#039;');
+    // Attribute version should also escape line endings (more restrictive)
+    expect(attribute).toContain('&#10;'); // \n escaped
+    expect(basic).not.toContain('&#10;'); // basic version doesn't escape \n
   });
 
   it('should handle line endings for Windows compatibility', () => {
@@ -137,7 +140,10 @@ describe('Security Integration Tests', () => {
     const attributeValue = `" onclick="alert('xss')" data-evil="`;
     const escaped = escapeHtmlAttribute(attributeValue);
     
-    expect(escaped).not.toContain('onclick=');
+    // The quotes around onclick should be escaped, preventing execution
+    expect(escaped).not.toContain('onclick="');
+    expect(escaped).not.toContain('"alert(');
+    expect(escaped).toContain('onclick=&quot;');
     expect(escaped).toContain('&quot;');
     expect(escaped).toContain('&#039;');
   });
