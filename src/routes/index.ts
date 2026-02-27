@@ -3,10 +3,15 @@ import {
   buildNativeStakeTransaction, 
   buildLiquidStakeTransaction, 
   buildUnstakeTransaction,
-  submitTransaction,
-  getStakeRecommendations,
-  getAgentPositions,
+  buildAndMonitorStakeTransaction,
+  monitorStakeTransaction
 } from '@/controllers/stake';
+import {
+  registerWebhook,
+  listWebhooks,
+  deleteWebhook,
+  getWebhookDeliveries
+} from '@/controllers/webhook';
 import { 
   healthCheck, 
   livenessCheck, 
@@ -16,7 +21,6 @@ import {
   getApiDocumentation, 
   getOpenApiSpec 
 } from '@/controllers/docs';
-import { getMetrics } from '@/controllers/metrics';
 import { 
   authenticateApiKey, 
   extractAgentWallet 
@@ -41,14 +45,10 @@ router.get('/health/ready', readinessCheck);
 router.get('/api/docs', readOnlyRateLimit, getApiDocumentation);
 router.get('/api/docs/openapi', readOnlyRateLimit, getOpenApiSpec);
 
-// Metrics endpoint (no auth required, for monitoring systems)
-router.get('/metrics', getMetrics);
-
 // Authenticated endpoints
 router.use('/stake', authenticateApiKey, extractAgentWallet);
 router.use('/unstake', authenticateApiKey, extractAgentWallet);
-router.use('/tx', authenticateApiKey);
-router.use('/positions', authenticateApiKey);
+router.use('/webhooks', authenticateApiKey);
 
 // Native staking endpoint
 router.post(
@@ -58,7 +58,7 @@ router.post(
   buildNativeStakeTransaction
 );
 
-// Liquid staking endpoint
+// Liquid staking endpoint (Phase 2)
 router.post(
   '/stake/liquid/build',
   walletRateLimit,
@@ -66,14 +66,7 @@ router.post(
   buildLiquidStakeTransaction
 );
 
-// Staking recommendations endpoint (no wallet needed)
-router.get(
-  '/stake/recommend',
-  readOnlyRateLimit,
-  getStakeRecommendations
-);
-
-// Unstaking endpoint
+// Unstaking endpoint (Phase 2)
 router.post(
   '/unstake/build',
   walletRateLimit,
@@ -81,19 +74,45 @@ router.post(
   buildUnstakeTransaction
 );
 
-// Transaction submission endpoint
+// Enhanced staking endpoints
 router.post(
-  '/tx/submit',
+  '/stake/build-and-monitor',
   walletRateLimit,
-  validateRequest(validationSchemas.transactionSubmitRequest),
-  submitTransaction
+  validateRequest(validationSchemas.buildAndMonitorRequest),
+  buildAndMonitorStakeTransaction
 );
 
-// Agent positions endpoint
-router.get(
-  '/positions/:wallet',
+router.post(
+  '/stake/monitor',
+  walletRateLimit,
+  validateRequest(validationSchemas.monitorStakeRequest),
+  monitorStakeTransaction
+);
+
+// Webhook endpoints
+router.post(
+  '/webhooks/register',
   readOnlyRateLimit,
-  getAgentPositions
+  validateRequest(validationSchemas.registerWebhookRequest),
+  registerWebhook
+);
+
+router.get(
+  '/webhooks',
+  readOnlyRateLimit,
+  listWebhooks
+);
+
+router.delete(
+  '/webhooks/:id',
+  readOnlyRateLimit,
+  deleteWebhook
+);
+
+router.get(
+  '/webhooks/:id/deliveries',
+  readOnlyRateLimit,
+  getWebhookDeliveries
 );
 
 export default router;

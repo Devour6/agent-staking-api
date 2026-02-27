@@ -1,0 +1,37 @@
+[
+  {
+    "id": "failed-delivery-id",
+    "webhookId": "test-webhook-id",
+    "event": "stake_confirmed",
+    "payload": {
+      "transactionSignature": "test-signature",
+      "amount": 1000000000,
+      "validatorVoteAccount": "test-validator",
+      "agentWallet": "test-agent",
+      "stakeAccount": "test-stake",
+      "timestamp": "2026-02-27T00:04:05.627Z"
+    },
+    "attempt": 2,
+    "status": "success",
+    "createdAt": "2026-02-27T00:04:05.627Z",
+    "responseStatus": 200,
+    "responseBody": "OK",
+    "deliveredAt": "2026-02-27T00:04:05.629Z"
+  },
+  {
+    "id": "max-retries-delivery-id",
+    "webhookId": "test-webhook-id",
+    "event": "stake_confirmed",
+    "payload": {
+      "transactionSignature": "test-signature",
+      "amount": 1000000000,
+      "validatorVoteAccount": "test-validator",
+      "agentWallet": "test-agent",
+      "stakeAccount": "test-stake",
+      "timestamp": "2026-02-27T00:04:05.631Z"
+    },
+    "attempt": 3,
+    "status": "max_retries_reached",
+    "createdAt": "2026-02-27T00:04:05.631Z"
+  }
+]
