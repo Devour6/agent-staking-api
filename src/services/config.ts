@@ -15,6 +15,8 @@ const configSchema = Joi.object({
   PHASE_FEE_WALLET: Joi.string().required(),
   PHASE_VALIDATOR_VOTE_ACCOUNT: Joi.string().required(),
   RAKE_FEE_BASIS_POINTS: Joi.number().min(0).max(10000).default(10),
+  PHASE_YIELD_STAKE_POOL_MINT: Joi.string().default('phaseZSfPxTDBpiVb96H4XFSD8xHeHxZre5HerehBJG'),
+  PHASE_YIELD_STAKE_POOL_ADDRESS: Joi.string().optional(),
   
   API_KEY_SECRET: Joi.string().min(32).required(),
   
@@ -50,6 +52,8 @@ export const config: AppConfig = {
     feeWallet: envVars.PHASE_FEE_WALLET,
     validatorVoteAccount: envVars.PHASE_VALIDATOR_VOTE_ACCOUNT,
     rakeFeeBasisPoints: envVars.RAKE_FEE_BASIS_POINTS,
+    yieldStakePoolMint: envVars.PHASE_YIELD_STAKE_POOL_MINT,
+    yieldStakePoolAddress: envVars.PHASE_YIELD_STAKE_POOL_ADDRESS,
   },
   auth: {
     apiKeySecret: envVars.API_KEY_SECRET,

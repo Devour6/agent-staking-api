@@ -13,6 +13,8 @@ export interface PhaseConfig {
   feeWallet: string;
   validatorVoteAccount: string;
   rakeFeeBasisPoints: number;
+  yieldStakePoolMint: string;
+  yieldStakePoolAddress?: string;
 }
 
 export interface AuthConfig {

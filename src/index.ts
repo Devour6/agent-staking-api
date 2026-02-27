@@ -14,7 +14,7 @@ async function startServer(): Promise<void> {
     
     if (!healthCheck.healthy) {
       logger.error('Failed to connect to Solana RPC', {
-        error: healthCheck.error,
+        error: healthCheck.error || 'Unknown connection error',
         rpcUrl: config.solana.rpcUrl,
       });
       process.exit(1);

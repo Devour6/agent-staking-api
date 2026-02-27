@@ -2,12 +2,14 @@ import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { config } from '@/services/config';
 import { logger } from '@/services/logger';
+import { apiKeyManager } from '@/services/apiKeyManager';
 
 // Extend Request interface to include apiKey
 declare global {
   namespace Express {
     interface Request {
       apiKey?: string;
+      apiKeyId?: string;
       agentWallet?: string;
     }
   }
@@ -47,8 +49,9 @@ export const authenticateApiKey = (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    // Validate API key
-    if (!isValidApiKey(token)) {
+    // Validate API key using the manager
+    const validation = apiKeyManager.validateApiKey(token);
+    if (!validation.valid) {
       logger.warn('Invalid API key attempt', {
         ip: req.ip,
         userAgent: req.get('User-Agent'),
@@ -66,13 +69,17 @@ export const authenticateApiKey = (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    // Store API key in request for potential logging
+    // Store API key and key ID in request for potential logging
     req.apiKey = token;
+    if (validation.keyId) {
+      req.apiKeyId = validation.keyId;
+    }
     
     logger.debug('API key authenticated', {
       path: req.path,
       method: req.method,
       ip: req.ip,
+      keyId: validation.keyId,
     });
 
     next();
@@ -94,15 +101,14 @@ export const authenticateApiKey = (req: Request, res: Response, next: NextFuncti
 };
 
 /**
- * Validate API key using HMAC
- * In production, this would validate against a database of registered API keys
+ * Legacy API key validation function (deprecated)
+ * @deprecated Use apiKeyManager.validateApiKey() instead
+ * This function is kept for backward compatibility but is no longer used.
+ * All validation now goes through the ApiKeyManager service.
  */
 function isValidApiKey(apiKey: string): boolean {
   try {
-    // For Phase 1, we'll use a simple validation
-    // In production, implement proper API key validation with database lookup
-    
-    // Basic format validation
+    // Basic format validation for compatibility
     if (!apiKey || apiKey.length < 32) {
       return false;
     }
@@ -113,7 +119,6 @@ function isValidApiKey(apiKey: string): boolean {
     }
     
     // For development/testing, accept any valid format key
-    // TODO: Implement proper API key registration and validation
     return true;
   } catch (error) {
     logger.error('API key validation error', {
