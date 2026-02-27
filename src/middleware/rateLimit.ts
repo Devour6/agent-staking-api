@@ -33,7 +33,7 @@ const rateLimitHandler = (req: Request, res: Response) => {
     path: req.path,
     method: req.method,
     userAgent: req.get('User-Agent'),
-    apiKey: req.apiKey?.substring(0, 8) + '...', // Log partial API key for debugging
+    // API key logging removed for security (sensitive information)
   });
   
   res.status(429).json({

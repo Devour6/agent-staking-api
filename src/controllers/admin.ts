@@ -3,6 +3,7 @@ import { asyncHandler, createApiResponse, createApiError } from '@/middleware/er
 import { apiKeyManager } from '@/services/apiKeyManager';
 import * as metricsService from '@/services/metrics';
 import { logger } from '@/services/logger';
+import { escapeHtml } from '@/utils/htmlUtils';
 import client from 'prom-client';
 
 interface DashboardStats {
@@ -186,9 +187,9 @@ export const getAdminDashboard = asyncHandler(
                 <tbody>
                     ${stats.topAgents.map(agent => `
                         <tr>
-                            <td><code>${agent.agentId}</code></td>
+                            <td><code>${escapeHtml(agent.agentId)}</code></td>
                             <td>${agent.requestCount.toLocaleString()}</td>
-                            <td>${agent.lastSeen.toLocaleString()}</td>
+                            <td>${escapeHtml(agent.lastSeen.toLocaleString())}</td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -197,6 +198,24 @@ export const getAdminDashboard = asyncHandler(
     </div>
 </body>
 </html>`;
+    
+    // Set strict CSP for admin dashboard to prevent XSS
+    res.setHeader('Content-Security-Policy', 
+      "default-src 'self'; " +
+      "style-src 'self' 'unsafe-inline'; " + // Allow inline styles for dashboard styling
+      "script-src 'self'; " +
+      "img-src 'self' data: https:; " +
+      "connect-src 'self'; " +
+      "font-src 'self'; " +
+      "object-src 'none'; " +
+      "media-src 'none'; " +
+      "child-src 'none'; " +
+      "frame-src 'none'; " +
+      "worker-src 'none'; " +
+      "frame-ancestors 'none'; " +
+      "form-action 'self'; " +
+      "base-uri 'self';"
+    );
     
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
