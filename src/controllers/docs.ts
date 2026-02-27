@@ -6,6 +6,83 @@ import path from 'path';
 import yaml from 'js-yaml';
 import swaggerUi from 'swagger-ui-express';
 
+/**
+ * URL-safe escaping for server URLs
+ * Validates and normalizes URLs to prevent injection
+ */
+function escapeServerUrl(url: string, allowedHosts: string[] = []): string {
+  try {
+    const parsedUrl = new URL(url);
+    
+    // Validate protocol
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      throw new Error('Invalid protocol');
+    }
+    
+    // If allowedHosts is specified, validate hostname
+    if (allowedHosts.length > 0) {
+      const isAllowed = allowedHosts.some(host => {
+        // Support wildcards like *.example.com
+        if (host.startsWith('*.')) {
+          const domain = host.substring(2);
+          return parsedUrl.hostname.endsWith('.' + domain) || parsedUrl.hostname === domain;
+        }
+        return parsedUrl.hostname === host;
+      });
+      
+      if (!isAllowed) {
+        throw new Error('Hostname not in allowlist');
+      }
+    }
+    
+    // Return normalized URL (this removes any malicious components)
+    return parsedUrl.toString();
+  } catch (error) {
+    // Return safe fallback for invalid URLs
+    return 'http://localhost:3000';
+  }
+}
+
+/**
+ * Validate and sanitize host header values
+ * Prevents Host header injection attacks
+ */
+function validateHostHeader(host: string | undefined, allowedHosts: string[] = []): string | null {
+  if (!host || typeof host !== 'string') {
+    return null;
+  }
+  
+  // Remove port if present for validation
+  const hostname = host.split(':')[0];
+  
+  // Additional check to ensure hostname exists after split
+  if (!hostname) {
+    return null;
+  }
+  
+  // Basic validation - no special characters that could indicate injection
+  if (!/^[a-zA-Z0-9.-]+$/.test(hostname)) {
+    return null;
+  }
+  
+  // If allowedHosts is specified, validate against it
+  if (allowedHosts.length > 0) {
+    const isAllowed = allowedHosts.some(allowedHost => {
+      if (allowedHost.startsWith('*.')) {
+        const domain = allowedHost.substring(2);
+        return hostname.endsWith('.' + domain) || hostname === domain;
+      }
+      return hostname === allowedHost;
+    });
+    
+    if (!isAllowed) {
+      return null;
+    }
+  }
+  
+  return host;
+}
+
 interface ApiDocumentation {
   title: string;
   version: string;
@@ -38,7 +115,12 @@ interface ApiDocumentation {
  */
 export const getApiDocumentation = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    // Securely construct base URL with validation
+    const allowedHosts = ['localhost', '127.0.0.1', '*.phaselabs.io', '*.vercel.app'];
+    const validatedHost = validateHostHeader(req.get('host'), allowedHosts);
+    const baseUrl = validatedHost 
+      ? escapeServerUrl(`${req.protocol}://${validatedHost}`, allowedHosts)
+      : 'http://localhost:3000'; // Safe fallback
     
     const documentation: ApiDocumentation = {
       title: 'Phase Agent Staking API',
@@ -149,16 +231,21 @@ export const getOpenApiSpec = asyncHandler(
       const yamlContent = fs.readFileSync(openApiPath, 'utf8');
       const openApiSpec = yaml.load(yamlContent) as any;
       
-      // Update server URL to match current request
+      // Update server URL to match current request (with security validation)
       if (openApiSpec.servers) {
-        const currentServerUrl = `${req.protocol}://${req.get('host')}`;
-        const currentServer = {
-          url: currentServerUrl,
-          description: req.get('host')?.includes('localhost') ? 'Development server' : 'Current server'
-        };
+        const allowedHosts = ['localhost', '127.0.0.1', '*.phaselabs.io', '*.vercel.app'];
+        const validatedHost = validateHostHeader(req.get('host'), allowedHosts);
         
-        // Add current server to the beginning of servers array
-        openApiSpec.servers = [currentServer, ...openApiSpec.servers.filter((s: any) => s.url !== currentServerUrl)];
+        if (validatedHost) {
+          const currentServerUrl = escapeServerUrl(`${req.protocol}://${validatedHost}`, allowedHosts);
+          const currentServer = {
+            url: currentServerUrl,
+            description: validatedHost.includes('localhost') ? 'Development server' : 'Current server'
+          };
+          
+          // Add current server to the beginning of servers array
+          openApiSpec.servers = [currentServer, ...openApiSpec.servers.filter((s: any) => s.url !== currentServerUrl)];
+        }
       }
       
       res.json(openApiSpec);
@@ -173,8 +260,8 @@ export const getOpenApiSpec = asyncHandler(
         },
         servers: [
           {
-            url: `${req.protocol}://${req.get('host')}`,
-            description: 'Current server',
+            url: 'http://localhost:3000', // Safe fallback URL
+            description: 'Development server',
           },
         ],
         paths: {
