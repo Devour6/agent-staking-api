@@ -137,7 +137,7 @@ paths: {}
         .set('Host', 'localhost:3000')
         .expect(200);
 
-      const currentServerUrl = 'http://localhost:3000';
+      const currentServerUrl = 'http://localhost:3000/';  // escapeServerUrl normalizes with trailing slash
       expect(response.body.servers[0].url).toBe(currentServerUrl);
       expect(response.body.servers[0].description).toContain('Development');
       

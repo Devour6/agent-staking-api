@@ -3,8 +3,8 @@ import { asyncHandler, createApiResponse, createApiError } from '@/middleware/er
 import { apiKeyManager } from '@/services/apiKeyManager';
 import * as metricsService from '@/services/metrics';
 import { logger } from '@/services/logger';
-import { htmlEscape } from '@/utils/htmlEscape';
-import client from 'prom-client';
+import { escapeHtml } from '@/utils/htmlUtils';
+import { metricsRegistry } from '@/services/metrics';
 
 interface DashboardStats {
   apiCalls: {
@@ -52,7 +52,7 @@ interface ApiKeyStats {
 export const getAdminDashboard = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     // Get metrics from Prometheus
-    const metrics = await client.register.metrics();
+    const metrics = await metricsRegistry.metrics();
     const stats = await calculateDashboardStats(metrics);
     
     const html = `
@@ -187,9 +187,9 @@ export const getAdminDashboard = asyncHandler(
                 <tbody>
                     ${stats.topAgents.map(agent => `
                         <tr>
-                            <td><code>${htmlEscape(agent.agentId)}</code></td>
-                            <td>${htmlEscape(agent.requestCount.toLocaleString())}</td>
-                            <td>${htmlEscape(agent.lastSeen.toLocaleString())}</td>
+                            <td><code>${escapeHtml(agent.agentId)}</code></td>
+                            <td>${escapeHtml(agent.requestCount.toLocaleString())}</td>
+                            <td>${escapeHtml(agent.lastSeen.toLocaleString())}</td>
                         </tr>
                     `).join('')}
                 </tbody>

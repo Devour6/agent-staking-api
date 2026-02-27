@@ -232,20 +232,22 @@ export const getOpenApiSpec = asyncHandler(
       const openApiSpec = yaml.load(yamlContent) as any;
       
       // Update server URL to match current request (with security validation)
-      if (openApiSpec.servers) {
-        const allowedHosts = ['localhost', '127.0.0.1', '*.phaselabs.io', '*.vercel.app'];
-        const validatedHost = validateHostHeader(req.get('host'), allowedHosts);
+      const allowedHosts = ['localhost', '127.0.0.1', '*.phaselabs.io', '*.vercel.app'];
+      const validatedHost = validateHostHeader(req.get('host'), allowedHosts);
+      
+      if (validatedHost) {
+        const currentServerUrl = escapeServerUrl(`${req.protocol}://${validatedHost}`, allowedHosts);
+        const currentServer = {
+          url: currentServerUrl,  // Preserve URL normalization as intended by escapeServerUrl
+          description: validatedHost.includes('localhost') ? 'Development server' : 'Current server'
+        };
         
-        if (validatedHost) {
-          const currentServerUrl = escapeServerUrl(`${req.protocol}://${validatedHost}`, allowedHosts);
-          const currentServer = {
-            url: currentServerUrl,
-            description: validatedHost.includes('localhost') ? 'Development server' : 'Current server'
-          };
-          
-          // Add current server to the beginning of servers array
-          openApiSpec.servers = [currentServer, ...openApiSpec.servers.filter((s: any) => s.url !== currentServerUrl)];
+        // Ensure servers array exists and inject current server
+        if (!openApiSpec.servers) {
+          openApiSpec.servers = [];
         }
+        // Add current server to the beginning of servers array
+        openApiSpec.servers = [currentServer, ...openApiSpec.servers.filter((s: any) => s.url !== currentServerUrl)];
       }
       
       res.json(openApiSpec);
@@ -277,6 +279,21 @@ export const getOpenApiSpec = asyncHandler(
           },
         },
       };
+      
+      // Apply the same server injection logic as the success branch
+      const allowedHosts = ['localhost', '127.0.0.1', '*.phaselabs.io', '*.vercel.app'];
+      const validatedHost = validateHostHeader(req.get('host'), allowedHosts);
+      
+      if (validatedHost) {
+        const currentServerUrl = escapeServerUrl(`${req.protocol}://${validatedHost}`, allowedHosts);
+        const currentServer = {
+          url: currentServerUrl,  // Preserve URL normalization as intended by escapeServerUrl
+          description: validatedHost.includes('localhost') ? 'Development server' : 'Current server'
+        };
+        
+        // Add current server to the beginning of servers array
+        fallbackSpec.servers = [currentServer, ...fallbackSpec.servers.filter((s: any) => s.url !== currentServerUrl)];
+      }
       
       res.json(fallbackSpec);
     }

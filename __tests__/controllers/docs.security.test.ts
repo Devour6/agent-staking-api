@@ -150,8 +150,8 @@ paths: {}
       expect(response.body.openapi).toBe('3.0.3');
       expect(response.body.info.title).toContain('Phase Agent Staking API');
       
-      // Should use safe fallback server
-      expect(response.body.servers[0].url).toBe('http://localhost:3000');
+      // Should use safe fallback server (normalized with trailing slash)
+      expect(response.body.servers[0].url).toBe('http://localhost:3000/');
     });
 
     it('should validate protocol in constructed URLs', async () => {

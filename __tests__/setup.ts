@@ -1,3 +1,6 @@
+// Mock prom-client FIRST, before any other imports
+jest.mock('prom-client', () => require('../__mocks__/prom-client.js'));
+
 // Set up test environment variables before importing other modules
 process.env.NODE_ENV = 'test';
 process.env.SOLANA_RPC_URL = 'https://api.devnet.solana.com';

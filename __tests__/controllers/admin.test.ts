@@ -1,3 +1,6 @@
+// Mock prom-client before any other imports to prevent Registry constructor issues  
+jest.mock('prom-client', () => require('../../__mocks__/prom-client.js'));
+
 import { Request, Response, NextFunction } from 'express';
 import { apiKeyManager } from '../../src/services/apiKeyManager';
 import { 
