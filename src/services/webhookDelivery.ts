@@ -373,13 +373,18 @@ export class WebhookDeliveryService {
       intervalMs,
     });
 
-    return setInterval(() => {
+    const timer = setInterval(() => {
       this.processRetryQueue().catch(error => {
         logger.error('Retry processor error', {
           error: (error as Error).message,
         });
       });
     }, intervalMs);
+    
+    // Unref the timer to prevent it from keeping the process alive
+    timer.unref();
+    
+    return timer;
   }
 }
 

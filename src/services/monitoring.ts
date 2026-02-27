@@ -192,6 +192,9 @@ export class StakeMonitoringService {
         });
       });
     }, this.checkIntervalMs);
+    
+    // Unref to prevent hanging Jest
+    this.monitoringInterval.unref();
   }
 
   stopMonitoring(): void {
@@ -262,13 +265,18 @@ export class StakeMonitoringService {
   startValidatorMonitoring(): NodeJS.Timeout {
     logger.info('Starting validator performance monitoring');
     
-    return setInterval(() => {
+    const timer = setInterval(() => {
       this.checkValidatorPerformance().catch(error => {
         logger.error('Validator performance check error', {
           error: (error as Error).message,
         });
       });
     }, 300000); // Check every 5 minutes
+    
+    // Unref to prevent hanging Jest
+    timer.unref();
+    
+    return timer;
   }
 }
 
