@@ -4,6 +4,7 @@ import { config } from '@/services/config';
 import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
+import swaggerUi from 'swagger-ui-express';
 
 interface ApiDocumentation {
   title: string;
@@ -194,3 +195,75 @@ export const getOpenApiSpec = asyncHandler(
     }
   }
 );
+
+/**
+ * Swagger UI Documentation
+ * Returns setup for swagger-ui-express middleware
+ */
+export function getSwaggerUiSetup() {
+  try {
+    const openApiPath = path.join(__dirname, '../../docs/openapi.yaml');
+    const yamlContent = fs.readFileSync(openApiPath, 'utf8');
+    const swaggerDocument = yaml.load(yamlContent) as any;
+    
+    const options = {
+      customCss: `
+        .swagger-ui .topbar { display: none; }
+        .swagger-ui .info { margin-bottom: 30px; }
+        .swagger-ui .scheme-container { background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+      `,
+      customSiteTitle: 'Phase Agent Staking API - Documentation',
+      swaggerOptions: {
+        docExpansion: 'list',
+        operationsSorter: 'alpha',
+        tagsSorter: 'alpha',
+        tryItOutEnabled: true,
+        requestInterceptor: (req: any) => {
+          // Add any custom headers or processing here
+          return req;
+        }
+      }
+    };
+    
+    return {
+      swaggerDocument,
+      options
+    };
+  } catch (error) {
+    // Fallback document if file reading fails
+    const fallbackDocument = {
+      openapi: '3.0.3',
+      info: {
+        title: 'Phase Agent Staking API',
+        version: '1.0.0',
+        description: 'Non-custodial transaction builder service for AI agents',
+      },
+      servers: [
+        {
+          url: 'http://localhost:3000',
+          description: 'Development server',
+        },
+      ],
+      paths: {
+        '/health': {
+          get: {
+            summary: 'Health check',
+            tags: ['General'],
+            responses: {
+              '200': {
+                description: 'System is healthy',
+              },
+            },
+          },
+        },
+      },
+    };
+    
+    return {
+      swaggerDocument: fallbackDocument,
+      options: {
+        customSiteTitle: 'Phase Agent Staking API - Documentation'
+      }
+    };
+  }
+}

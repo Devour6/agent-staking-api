@@ -1,13 +1,17 @@
 import crypto from 'crypto';
 import { logger } from './logger';
 
+export type ApiKeyTier = 'free' | 'pro' | 'enterprise';
+
 interface ApiKeyInfo {
   keyId: string;
   hashedKey: string;
   createdAt: Date;
-  lastUsed?: Date;
+  lastUsed: Date | undefined;
   isActive: boolean;
-  rotationScheduledAt?: Date;
+  rotationScheduledAt: Date | undefined;
+  tier: ApiKeyTier;
+  description: string | undefined;
 }
 
 class ApiKeyManager {
@@ -40,7 +44,11 @@ class ApiKeyManager {
         keyId,
         hashedKey,
         createdAt: new Date(),
+        lastUsed: undefined,
         isActive: true,
+        rotationScheduledAt: undefined,
+        tier: 'free',
+        description: 'Default API key from environment'
       });
 
       logger.info('Loaded default API key', { keyId });
@@ -50,7 +58,7 @@ class ApiKeyManager {
   /**
    * Generate a new API key
    */
-  generateApiKey(): { keyId: string; apiKey: string } {
+  generateApiKey(options: { tier?: ApiKeyTier; description?: string } = {}): { keyId: string; apiKey: string } {
     const keyId = crypto.randomUUID();
     const apiKey = crypto.randomBytes(32).toString('hex');
     const hashedKey = this.hashKey(apiKey);
@@ -59,14 +67,18 @@ class ApiKeyManager {
       keyId,
       hashedKey,
       createdAt: new Date(),
+      lastUsed: undefined,
       isActive: true,
       rotationScheduledAt: new Date(Date.now() + this.rotationIntervalMs),
+      tier: options.tier || 'free',
+      description: options.description
     };
 
     this.keys.set(keyId, keyInfo);
 
     logger.info('Generated new API key', { 
       keyId, 
+      tier: keyInfo.tier,
       rotationScheduledAt: keyInfo.rotationScheduledAt 
     });
 
@@ -76,7 +88,7 @@ class ApiKeyManager {
   /**
    * Validate an API key
    */
-  validateApiKey(apiKey: string): { valid: boolean; keyId?: string } {
+  validateApiKey(apiKey: string): { valid: boolean; keyId?: string; tier?: ApiKeyTier } {
     const hashedKey = this.hashKey(apiKey);
 
     for (const [keyId, keyInfo] of this.keys.entries()) {
@@ -84,9 +96,9 @@ class ApiKeyManager {
         // Update last used timestamp
         keyInfo.lastUsed = new Date();
         
-        logger.debug('API key validated', { keyId });
+        logger.debug('API key validated', { keyId, tier: keyInfo.tier });
         
-        return { valid: true, keyId };
+        return { valid: true, keyId, tier: keyInfo.tier };
       }
     }
 
@@ -192,6 +204,83 @@ class ApiKeyManager {
     if (this.rotationSchedulerInterval) {
       clearInterval(this.rotationSchedulerInterval);
       this.rotationSchedulerInterval = undefined;
+    }
+  }
+
+  /**
+   * List all API keys (without sensitive data)
+   */
+  async listKeys(): Promise<Array<{
+    keyId: string;
+    createdAt: Date;
+    lastUsed: Date | undefined;
+    isActive: boolean;
+    tier: ApiKeyTier;
+    description: string | undefined;
+  }>> {
+    return Array.from(this.keys.values()).map(key => ({
+      keyId: key.keyId,
+      createdAt: key.createdAt,
+      lastUsed: key.lastUsed,
+      isActive: key.isActive,
+      tier: key.tier,
+      description: key.description
+    }));
+  }
+
+  /**
+   * Get count of active API keys
+   */
+  async getActiveKeyCount(): Promise<number> {
+    return Array.from(this.keys.values()).filter(key => key.isActive).length;
+  }
+
+  /**
+   * Create a new API key with specified tier
+   */
+  async createKey(options: { tier?: ApiKeyTier; description?: string }): Promise<{
+    keyId: string;
+    key: string;
+    createdAt: Date;
+  }> {
+    const { keyId, apiKey } = this.generateApiKey(options);
+    const keyInfo = this.keys.get(keyId)!;
+    
+    return {
+      keyId,
+      key: apiKey,
+      createdAt: keyInfo.createdAt
+    };
+  }
+
+  /**
+   * Revoke (deactivate) an API key
+   */
+  async revokeKey(keyId: string): Promise<boolean> {
+    const keyInfo = this.keys.get(keyId);
+    if (!keyInfo) {
+      return false;
+    }
+
+    keyInfo.isActive = false;
+    logger.info('API key revoked', { keyId });
+    
+    return true;
+  }
+
+  /**
+   * Get tier rate limits
+   */
+  getTierLimits(tier: ApiKeyTier): { requestsPerMinute: number } {
+    switch (tier) {
+      case 'free':
+        return { requestsPerMinute: 10 };
+      case 'pro':
+        return { requestsPerMinute: 100 };
+      case 'enterprise':
+        return { requestsPerMinute: 1000 };
+      default:
+        return { requestsPerMinute: 10 };
     }
   }
 

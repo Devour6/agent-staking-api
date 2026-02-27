@@ -8,58 +8,46 @@
     ],
     "secret": "test-secret",
     "active": true,
-    "createdAt": "2026-02-27T00:04:05.628Z",
+    "createdAt": "2026-02-27T07:58:19.209Z",
     "failureCount": 0,
-    "lastDeliveryAt": "2026-02-27T00:04:05.629Z"
+    "lastDeliveryAt": "2026-02-27T07:58:19.211Z"
   },
   {
-    "id": "4c9a0746a9db95d1a77badde37dec1e9",
-    "apiKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    "url": "https://other-api-key.example.com/webhook",
-    "events": [
-      "stake_confirmed"
-    ],
-    "secret": "e79a2cc95c084e92471ec93075824faf4c3935acbb781f6971f97c780c63a447",
-    "active": true,
-    "createdAt": "2026-02-27T00:04:05.882Z",
-    "failureCount": 0
-  },
-  {
-    "id": "c1f2430d571146886d7b0a749658c0f5",
+    "id": "cd4370863feec5720c781b774436b62b",
     "apiKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "url": "https://deliveries-test.example.com/webhook/1772150645898",
+    "url": "https://deliveries-test.example.com/webhook/1772179099509",
     "events": [
       "stake_confirmed"
     ],
-    "secret": "7adda85a36085947b7faa937a0fb2b56ff54dc8c1017c38ce5bc9937d5b5ab95",
+    "secret": "af1868cb5f9aa241f3a48072eaebb422e9a94aa577c432f7da704ffea90d42ea",
     "active": true,
-    "createdAt": "2026-02-27T00:04:05.899Z",
+    "createdAt": "2026-02-27T07:58:19.513Z",
     "failureCount": 0
   },
   {
-    "id": "865d4f1392c1c10d53804027221af15e",
+    "id": "c3dde58878f59ada4a4b2cb5fd7b63a9",
     "apiKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "url": "https://example.com/webhook",
     "events": [
       "stake_confirmed",
       "stake_activated"
     ],
-    "secret": "00006ab8a6e3b99ad3c2672a043f37b4b5718b1b6440ac9b8beb7607ffd2817a",
+    "secret": "f7d6301a5dd15ceb064d51813f6d15389d969c43f3ff0186a80f4b09c2f044e1",
     "active": true,
-    "createdAt": "2026-02-27T00:04:07.089Z",
+    "createdAt": "2026-02-27T07:58:20.090Z",
     "failureCount": 0
   },
   {
-    "id": "2ac2a0e84492e31bda893d9ff7b9289b",
+    "id": "53ccba68c82e6351e049470cfa49685c",
     "apiKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "url": "https://default-events.example.com/webhook",
     "events": [
       "stake_confirmed",
       "stake_activated"
     ],
-    "secret": "e66d3b2df279e41df6f6fae63bdca643ff0807c9d1d8b775ada789e2bc0f6c4d",
+    "secret": "ba2f5b70220a575a6440bac7c29256004df4fbbbb454a0fd4d68bd860c430cb4",
     "active": true,
-    "createdAt": "2026-02-27T00:04:07.447Z",
+    "createdAt": "2026-02-27T07:58:20.290Z",
     "failureCount": 0
   }
 ]

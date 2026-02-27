@@ -10,6 +10,7 @@ declare global {
     interface Request {
       apiKey?: string;
       apiKeyId?: string;
+      apiKeyTier?: string;
       agentWallet?: string;
     }
   }
@@ -69,10 +70,13 @@ export const authenticateApiKey = (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    // Store API key and key ID in request for potential logging
+    // Store API key, key ID, and tier in request for potential logging and rate limiting
     req.apiKey = token;
     if (validation.keyId) {
       req.apiKeyId = validation.keyId;
+    }
+    if (validation.tier) {
+      req.apiKeyTier = validation.tier;
     }
     
     logger.debug('API key authenticated', {
@@ -80,6 +84,7 @@ export const authenticateApiKey = (req: Request, res: Response, next: NextFuncti
       method: req.method,
       ip: req.ip,
       keyId: validation.keyId,
+      tier: validation.tier,
     });
 
     next();
