@@ -4,6 +4,84 @@ import { config } from '@/services/config';
 import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
+import swaggerUi from 'swagger-ui-express';
+
+/**
+ * URL-safe escaping for server URLs
+ * Validates and normalizes URLs to prevent injection
+ */
+function escapeServerUrl(url: string, allowedHosts: string[] = []): string {
+  try {
+    const parsedUrl = new URL(url);
+    
+    // Validate protocol
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      throw new Error('Invalid protocol');
+    }
+    
+    // If allowedHosts is specified, validate hostname
+    if (allowedHosts.length > 0) {
+      const isAllowed = allowedHosts.some(host => {
+        // Support wildcards like *.example.com
+        if (host.startsWith('*.')) {
+          const domain = host.substring(2);
+          return parsedUrl.hostname.endsWith('.' + domain) || parsedUrl.hostname === domain;
+        }
+        return parsedUrl.hostname === host;
+      });
+      
+      if (!isAllowed) {
+        throw new Error('Hostname not in allowlist');
+      }
+    }
+    
+    // Return normalized URL (this removes any malicious components)
+    return parsedUrl.toString();
+  } catch (error) {
+    // Return safe fallback for invalid URLs
+    return 'http://localhost:3000';
+  }
+}
+
+/**
+ * Validate and sanitize host header values
+ * Prevents Host header injection attacks
+ */
+function validateHostHeader(host: string | undefined, allowedHosts: string[] = []): string | null {
+  if (!host || typeof host !== 'string') {
+    return null;
+  }
+  
+  // Remove port if present for validation
+  const hostname = host.split(':')[0];
+  
+  // Additional check to ensure hostname exists after split
+  if (!hostname) {
+    return null;
+  }
+  
+  // Basic validation - no special characters that could indicate injection
+  if (!/^[a-zA-Z0-9.-]+$/.test(hostname)) {
+    return null;
+  }
+  
+  // If allowedHosts is specified, validate against it
+  if (allowedHosts.length > 0) {
+    const isAllowed = allowedHosts.some(allowedHost => {
+      if (allowedHost.startsWith('*.')) {
+        const domain = allowedHost.substring(2);
+        return hostname.endsWith('.' + domain) || hostname === domain;
+      }
+      return hostname === allowedHost;
+    });
+    
+    if (!isAllowed) {
+      return null;
+    }
+  }
+  
+  return host;
+}
 
 interface ApiDocumentation {
   title: string;
@@ -37,7 +115,12 @@ interface ApiDocumentation {
  */
 export const getApiDocumentation = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    // Securely construct base URL with validation
+    const allowedHosts = ['localhost', '127.0.0.1', '*.phaselabs.io', '*.vercel.app'];
+    const validatedHost = validateHostHeader(req.get('host'), allowedHosts);
+    const baseUrl = validatedHost 
+      ? escapeServerUrl(`${req.protocol}://${validatedHost}`, allowedHosts)
+      : 'http://localhost:3000'; // Safe fallback
     
     const documentation: ApiDocumentation = {
       title: 'Phase Agent Staking API',
@@ -148,14 +231,21 @@ export const getOpenApiSpec = asyncHandler(
       const yamlContent = fs.readFileSync(openApiPath, 'utf8');
       const openApiSpec = yaml.load(yamlContent) as any;
       
-      // Update server URL to match current request
-      if (openApiSpec.servers) {
-        const currentServerUrl = `${req.protocol}://${req.get('host')}`;
+      // Update server URL to match current request (with security validation)
+      const allowedHosts = ['localhost', '127.0.0.1', '*.phaselabs.io', '*.vercel.app'];
+      const validatedHost = validateHostHeader(req.get('host'), allowedHosts);
+      
+      if (validatedHost) {
+        const currentServerUrl = escapeServerUrl(`${req.protocol}://${validatedHost}`, allowedHosts);
         const currentServer = {
-          url: currentServerUrl,
-          description: req.get('host')?.includes('localhost') ? 'Development server' : 'Current server'
+          url: currentServerUrl,  // Preserve URL normalization as intended by escapeServerUrl
+          description: validatedHost.includes('localhost') ? 'Development server' : 'Current server'
         };
         
+        // Ensure servers array exists and inject current server
+        if (!openApiSpec.servers) {
+          openApiSpec.servers = [];
+        }
         // Add current server to the beginning of servers array
         openApiSpec.servers = [currentServer, ...openApiSpec.servers.filter((s: any) => s.url !== currentServerUrl)];
       }
@@ -172,8 +262,8 @@ export const getOpenApiSpec = asyncHandler(
         },
         servers: [
           {
-            url: `${req.protocol}://${req.get('host')}`,
-            description: 'Current server',
+            url: 'http://localhost:3000', // Safe fallback URL
+            description: 'Development server',
           },
         ],
         paths: {
@@ -190,7 +280,94 @@ export const getOpenApiSpec = asyncHandler(
         },
       };
       
+      // Apply the same server injection logic as the success branch
+      const allowedHosts = ['localhost', '127.0.0.1', '*.phaselabs.io', '*.vercel.app'];
+      const validatedHost = validateHostHeader(req.get('host'), allowedHosts);
+      
+      if (validatedHost) {
+        const currentServerUrl = escapeServerUrl(`${req.protocol}://${validatedHost}`, allowedHosts);
+        const currentServer = {
+          url: currentServerUrl,  // Preserve URL normalization as intended by escapeServerUrl
+          description: validatedHost.includes('localhost') ? 'Development server' : 'Current server'
+        };
+        
+        // Add current server to the beginning of servers array
+        fallbackSpec.servers = [currentServer, ...fallbackSpec.servers.filter((s: any) => s.url !== currentServerUrl)];
+      }
+      
       res.json(fallbackSpec);
     }
   }
 );
+
+/**
+ * Swagger UI Documentation
+ * Returns setup for swagger-ui-express middleware
+ */
+export function getSwaggerUiSetup() {
+  try {
+    const openApiPath = path.join(__dirname, '../../docs/openapi.yaml');
+    const yamlContent = fs.readFileSync(openApiPath, 'utf8');
+    const swaggerDocument = yaml.load(yamlContent) as any;
+    
+    const options = {
+      customCss: `
+        .swagger-ui .topbar { display: none; }
+        .swagger-ui .info { margin-bottom: 30px; }
+        .swagger-ui .scheme-container { background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+      `,
+      customSiteTitle: 'Phase Agent Staking API - Documentation',
+      swaggerOptions: {
+        docExpansion: 'list',
+        operationsSorter: 'alpha',
+        tagsSorter: 'alpha',
+        tryItOutEnabled: true,
+        requestInterceptor: (req: any) => {
+          // Add any custom headers or processing here
+          return req;
+        }
+      }
+    };
+    
+    return {
+      swaggerDocument,
+      options
+    };
+  } catch (error) {
+    // Fallback document if file reading fails
+    const fallbackDocument = {
+      openapi: '3.0.3',
+      info: {
+        title: 'Phase Agent Staking API',
+        version: '1.0.0',
+        description: 'Non-custodial transaction builder service for AI agents',
+      },
+      servers: [
+        {
+          url: 'http://localhost:3000',
+          description: 'Development server',
+        },
+      ],
+      paths: {
+        '/health': {
+          get: {
+            summary: 'Health check',
+            tags: ['General'],
+            responses: {
+              '200': {
+                description: 'System is healthy',
+              },
+            },
+          },
+        },
+      },
+    };
+    
+    return {
+      swaggerDocument: fallbackDocument,
+      options: {
+        customSiteTitle: 'Phase Agent Staking API - Documentation'
+      }
+    };
+  }
+}

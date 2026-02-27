@@ -1,9 +1,9 @@
-import client from 'prom-client';
+import { Registry, collectDefaultMetrics, Histogram, Counter, Gauge } from 'prom-client';
 import { Request, Response, NextFunction } from 'express';
 import { logger } from './logger';
 
 // Create a Registry which registers the metrics
-const register = new client.Registry();
+const register = new Registry();
 
 // Add a default label which is added to all metrics
 register.setDefaultLabels({
@@ -11,60 +11,60 @@ register.setDefaultLabels({
 });
 
 // Enable the collection of default metrics
-client.collectDefaultMetrics({ register });
+collectDefaultMetrics({ register });
 
 // Custom metrics
-const httpRequestDuration = new client.Histogram({
+const httpRequestDuration = new Histogram({
   name: 'http_request_duration_ms',
   help: 'Duration of HTTP requests in ms',
   labelNames: ['route', 'method', 'status_code'],
   buckets: [1, 5, 10, 25, 50, 100, 200, 500, 1000, 2000, 5000],
 });
 
-const httpRequestTotal = new client.Counter({
+const httpRequestTotal = new Counter({
   name: 'http_requests_total',
   help: 'Total number of HTTP requests',
   labelNames: ['route', 'method', 'status_code'],
 });
 
-const transactionBuildTotal = new client.Counter({
+const transactionBuildTotal = new Counter({
   name: 'transaction_build_total',
   help: 'Total number of transaction build requests',
   labelNames: ['transaction_type', 'success'],
 });
 
-const transactionBuildDuration = new client.Histogram({
+const transactionBuildDuration = new Histogram({
   name: 'transaction_build_duration_ms',
   help: 'Duration of transaction building in ms',
   labelNames: ['transaction_type'],
   buckets: [1, 5, 10, 25, 50, 100, 200, 500, 1000],
 });
 
-const solanaRpcCalls = new client.Counter({
+const solanaRpcCalls = new Counter({
   name: 'solana_rpc_calls_total',
   help: 'Total number of Solana RPC calls',
   labelNames: ['method', 'success'],
 });
 
-const solanaRpcDuration = new client.Histogram({
+const solanaRpcDuration = new Histogram({
   name: 'solana_rpc_duration_ms',
   help: 'Duration of Solana RPC calls in ms',
   labelNames: ['method'],
   buckets: [1, 10, 50, 100, 200, 500, 1000, 2000, 5000],
 });
 
-const activeConnections = new client.Gauge({
+const activeConnections = new Gauge({
   name: 'active_connections',
   help: 'Number of active connections',
 });
 
-const apiKeyUsage = new client.Counter({
+const apiKeyUsage = new Counter({
   name: 'api_key_usage_total',
   help: 'Total API key usage',
   labelNames: ['key_id', 'endpoint'],
 });
 
-const errorRate = new client.Counter({
+const errorRate = new Counter({
   name: 'errors_total',
   help: 'Total number of errors',
   labelNames: ['error_type', 'endpoint'],
