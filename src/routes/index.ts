@@ -34,6 +34,7 @@ import {
 } from '@/controllers/docs';
 import {
   getAdminDashboard,
+  getRateLimitDashboard,
   getApiKeys,
   createApiKey,
   revokeApiKey
@@ -70,6 +71,7 @@ router.get('/docs', swaggerUi.setup(swaggerSetup.swaggerDocument, swaggerSetup.o
 
 // Admin endpoints (authentication required)
 router.get('/admin/dashboard', authenticateApiKey, readOnlyRateLimit, getAdminDashboard);
+router.get('/admin/rate-limits', authenticateApiKey, readOnlyRateLimit, getRateLimitDashboard);
 router.get('/admin/api-keys', authenticateApiKey, readOnlyRateLimit, getApiKeys);
 router.post('/admin/api-keys', authenticateApiKey, readOnlyRateLimit, createApiKey);
 router.delete('/admin/api-keys/:keyId', authenticateApiKey, readOnlyRateLimit, revokeApiKey);
