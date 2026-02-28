@@ -30,6 +30,9 @@ interface AgentRegistrationResponse {
  */
 export const registerAgent = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
+    const requestId = Math.random().toString(36).substring(2, 15);
+    const startTime = Date.now();
+    
     const { 
       agentName, 
       agentWallet, 
@@ -39,77 +42,97 @@ export const registerAgent = asyncHandler(
       agreesToTerms 
     }: AgentRegistrationRequest = req.body;
 
-    // Validate required fields
-    if (!agentName || !agentWallet || !agreesToTerms) {
-      throw createApiError('Missing required fields: agentName, agentWallet, agreesToTerms', 400, 'MISSING_REQUIRED_FIELDS');
-    }
-
-    // Validate agent name (alphanumeric, hyphens, underscores, spaces, 3-50 chars)
-    if (!/^[a-zA-Z0-9 _-]{3,50}$/.test(agentName)) {
-      throw createApiError('Agent name must be 3-50 characters, alphanumeric with spaces, hyphens, or underscores only', 400, 'INVALID_AGENT_NAME');
-    }
-
-    // Validate Solana wallet address
-    try {
-      new PublicKey(agentWallet);
-    } catch (error) {
-      throw createApiError('Invalid Solana wallet address', 400, 'INVALID_WALLET_ADDRESS');
-    }
-
-    // Validate email if provided
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      throw createApiError('Invalid email address format', 400, 'INVALID_EMAIL');
-    }
-
-    // Validate tier
-    const validTiers = ['free', 'pro', 'enterprise'];
-    if (!validTiers.includes(tier)) {
-      throw createApiError('Invalid tier. Must be one of: free, pro, enterprise', 400, 'INVALID_TIER');
-    }
-
-    // Validate terms agreement
-    if (!agreesToTerms) {
-      throw createApiError('Must agree to terms of service', 400, 'TERMS_NOT_AGREED');
-    }
-
-    // Check if agent wallet is already registered
-    const existingKey = await apiKeyManager.findKeyByWallet(agentWallet);
-    if (existingKey) {
-      throw createApiError('Agent wallet already registered. Use existing API key or contact support.', 409, 'WALLET_ALREADY_REGISTERED');
-    }
-
-    // Generate API key for the agent
-    const newKey = await apiKeyManager.createKey({
-      tier,
-      description: `Self-registered agent: ${agentName}${description ? ` - ${description}` : ''}`,
+    logger.info('Processing agent registration', {
+      requestId,
       agentName,
-      agentWallet,
-      email,
-      registeredAt: new Date(),
-      selfRegistered: true
-    });
-
-    logger.info('Agent self-registered', { 
-      agentName, 
-      agentWallet,
-      keyId: newKey.keyId, 
+      agentWallet: `${agentWallet.substring(0, 4)}...${agentWallet.substring(agentWallet.length - 4)}`,
       tier,
-      email: email ? '[PROVIDED]' : '[NOT_PROVIDED]'
+      hasEmail: !!email,
+      hasDescription: !!description
     });
 
-    // Return success response with API key (only returned once)
-    const response: AgentRegistrationResponse = {
-      success: true,
-      data: {
-        agentId: newKey.keyId,
-        apiKey: newKey.key,
-        tier,
-        registeredAt: newKey.createdAt,
-        message: `Welcome ${agentName}! Your agent has been successfully registered. Please store your API key securely - it won't be shown again.`
-      }
-    };
+    try {
+      // Note: Basic validation is handled by validateRequest middleware
+      // Additional business logic validation only
 
-    res.status(201).json(response);
+      // Enterprise registrations require authentication
+      if (tier === 'enterprise') {
+        const apiKey = req.headers['x-api-key'] as string;
+        if (!apiKey) {
+          throw createApiError('Enterprise registration requires valid API key authentication', 401, 'AUTHENTICATION_REQUIRED');
+        }
+        
+        // Verify API key has admin privileges for enterprise registration
+        const keyInfo = await apiKeyManager.getKeyInfo(apiKey);
+        if (!keyInfo || !keyInfo.isActive || keyInfo.tier !== 'admin') {
+          throw createApiError('Enterprise registration requires admin API key', 403, 'INSUFFICIENT_PRIVILEGES');
+        }
+
+        logger.info('Enterprise registration authenticated', {
+          requestId,
+          adminKeyId: keyInfo.keyId
+        });
+      }
+
+      // Check if agent wallet is already registered
+      const existingKey = await apiKeyManager.findKeyByWallet(agentWallet);
+      if (existingKey) {
+        logger.warn('Attempted registration of existing wallet', {
+          requestId,
+          agentWallet: `${agentWallet.substring(0, 4)}...${agentWallet.substring(agentWallet.length - 4)}`,
+          existingKeyId: existingKey.keyId
+        });
+        throw createApiError('Agent wallet already registered. Use existing API key or contact support.', 409, 'WALLET_ALREADY_REGISTERED');
+      }
+
+      // Generate API key for the agent
+      const newKey = await apiKeyManager.createKey({
+        tier,
+        description: `Self-registered agent: ${agentName}${description ? ` - ${description}` : ''}`,
+        agentName,
+        agentWallet,
+        email,
+        registeredAt: new Date(),
+        selfRegistered: true
+      });
+
+      const processingTime = Date.now() - startTime;
+
+      logger.info('Agent registration successful', { 
+        requestId,
+        agentName, 
+        keyId: newKey.keyId, 
+        tier,
+        processingTime,
+        hasEmail: !!email,
+        hasDescription: !!description
+      });
+
+      // Return success response with API key (only returned once)
+      const response: AgentRegistrationResponse = {
+        success: true,
+        data: {
+          agentId: newKey.keyId,
+          apiKey: newKey.key,
+          tier,
+          registeredAt: newKey.createdAt,
+          message: `Welcome ${agentName}! Your agent has been successfully registered. Please store your API key securely - it won't be shown again.`
+        }
+      };
+
+      res.status(201).json(response);
+
+    } catch (error) {
+      const processingTime = Date.now() - startTime;
+      logger.error('Agent registration failed', {
+        requestId,
+        agentName,
+        tier,
+        processingTime,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
   }
 );
 
@@ -119,37 +142,60 @@ export const registerAgent = asyncHandler(
  */
 export const getAgentStatus = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
+    const requestId = Math.random().toString(36).substring(2, 15);
+    const startTime = Date.now();
     const { wallet } = req.params;
 
-    if (!wallet || Array.isArray(wallet)) {
-      throw createApiError('Valid wallet address is required', 400, 'MISSING_WALLET');
-    }
+    logger.info('Checking agent status', {
+      requestId,
+      wallet: `${wallet.substring(0, 4)}...${wallet.substring(wallet.length - 4)}`
+    });
 
-    // Validate Solana wallet address
     try {
-      new PublicKey(wallet);
-    } catch (error) {
-      throw createApiError('Invalid Solana wallet address', 400, 'INVALID_WALLET_ADDRESS');
-    }
+      // Route parameter validation handled by middleware
 
-    const keyInfo = await apiKeyManager.findKeyByWallet(wallet);
-    
-    if (!keyInfo) {
+      const keyInfo = await apiKeyManager.findKeyByWallet(wallet);
+      const processingTime = Date.now() - startTime;
+      
+      if (!keyInfo) {
+        logger.info('Agent not registered', {
+          requestId,
+          processingTime
+        });
+
+        res.json(createApiResponse({
+          registered: false,
+          message: 'Agent not registered'
+        }));
+        return;
+      }
+
+      logger.info('Agent status retrieved', {
+        requestId,
+        keyId: keyInfo.keyId,
+        tier: getKeyTier(keyInfo.keyId),
+        isActive: keyInfo.isActive,
+        processingTime
+      });
+
       res.json(createApiResponse({
-        registered: false,
-        message: 'Agent not registered'
+        registered: true,
+        agentId: keyInfo.keyId,
+        tier: getKeyTier(keyInfo.keyId),
+        registeredAt: keyInfo.createdAt,
+        lastUsed: keyInfo.lastUsed,
+        isActive: keyInfo.isActive
       }));
-      return;
-    }
 
-    res.json(createApiResponse({
-      registered: true,
-      agentId: keyInfo.keyId,
-      tier: getKeyTier(keyInfo.keyId),
-      registeredAt: keyInfo.createdAt,
-      lastUsed: keyInfo.lastUsed,
-      isActive: keyInfo.isActive
-    }));
+    } catch (error) {
+      const processingTime = Date.now() - startTime;
+      logger.error('Agent status check failed', {
+        requestId,
+        processingTime,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
   }
 );
 
