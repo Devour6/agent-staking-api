@@ -13,8 +13,10 @@ jest.mock('@/services/logger', () => ({
 describe('Validators Controller', () => {
   let req: Partial<Request>;
   let res: Partial<Response>;
+  let next: jest.Mock;
 
   beforeEach(() => {
+    next = jest.fn();
     req = {
       query: {},
       params: {}
@@ -31,7 +33,7 @@ describe('Validators Controller', () => {
       it('should list validators with default parameters', async () => {
         req.query = {};
 
-        await listValidators(req as Request, res as Response);
+        await listValidators(req as Request, res as Response, next);
 
         expect(res.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -57,7 +59,7 @@ describe('Validators Controller', () => {
       it('should filter validators by minimum APY', async () => {
         req.query = { minApy: '7.0' };
 
-        await listValidators(req as Request, res as Response);
+        await listValidators(req as Request, res as Response, next);
 
         expect(res.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -82,7 +84,7 @@ describe('Validators Controller', () => {
       it('should filter validators by maximum commission', async () => {
         req.query = { maxCommission: '5.0' };
 
-        await listValidators(req as Request, res as Response);
+        await listValidators(req as Request, res as Response, next);
 
         expect(res.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -106,7 +108,7 @@ describe('Validators Controller', () => {
       it('should sort validators by commission in ascending order', async () => {
         req.query = { sortBy: 'commission', order: 'asc' };
 
-        await listValidators(req as Request, res as Response);
+        await listValidators(req as Request, res as Response, next);
 
         const call = (res.json as jest.Mock).mock.calls[0][0];
         const validators = call.data.validators;
@@ -120,7 +122,7 @@ describe('Validators Controller', () => {
       it('should handle pagination correctly', async () => {
         req.query = { limit: '2', offset: '1' };
 
-        await listValidators(req as Request, res as Response);
+        await listValidators(req as Request, res as Response, next);
 
         expect(res.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -144,7 +146,8 @@ describe('Validators Controller', () => {
       it('should reject invalid sortBy field', async () => {
         req.query = { sortBy: 'invalid_field' };
 
-        await expect(listValidators(req as Request, res as Response)).rejects.toThrow(
+        await listValidators(req as Request, res as Response, next);
+        expect(next).toHaveBeenCalledWith(
           expect.objectContaining({
             message: expect.stringContaining('Invalid sortBy field'),
             statusCode: 400
@@ -157,7 +160,7 @@ describe('Validators Controller', () => {
       it('should handle empty result set with filters', async () => {
         req.query = { minApy: '20.0' }; // Unrealistic APY
 
-        await listValidators(req as Request, res as Response);
+        await listValidators(req as Request, res as Response, next);
 
         const call = (res.json as jest.Mock).mock.calls[0][0];
         const validators = call.data.validators;
@@ -167,7 +170,7 @@ describe('Validators Controller', () => {
       it('should include inactive validators when activeOnly is false', async () => {
         req.query = { activeOnly: 'false' };
 
-        await listValidators(req as Request, res as Response);
+        await listValidators(req as Request, res as Response, next);
 
         expect(res.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -191,7 +194,7 @@ describe('Validators Controller', () => {
       it('should return validator details for valid vote account', async () => {
         req.params = { voteAccount: validVoteAccount };
 
-        await getValidatorDetails(req as Request, res as Response);
+        await getValidatorDetails(req as Request, res as Response, next);
 
         expect(res.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -215,7 +218,8 @@ describe('Validators Controller', () => {
       it('should reject invalid vote account format', async () => {
         req.params = { voteAccount: invalidVoteAccount };
 
-        await expect(getValidatorDetails(req as Request, res as Response)).rejects.toThrow(
+        await getValidatorDetails(req as Request, res as Response, next);
+        expect(next).toHaveBeenCalledWith(
           expect.objectContaining({
             message: 'Invalid vote account address format',
             statusCode: 400
@@ -226,7 +230,8 @@ describe('Validators Controller', () => {
       it('should return 404 for non-existent validator', async () => {
         req.params = { voteAccount: 'J1to3PQfXidUUhprQWgdKkQAMWPJAEqSJ7amkBDE9999' }; // Non-existent but valid format
 
-        await expect(getValidatorDetails(req as Request, res as Response)).rejects.toThrow(
+        await getValidatorDetails(req as Request, res as Response, next);
+        expect(next).toHaveBeenCalledWith(
           expect.objectContaining({
             message: 'Validator not found',
             statusCode: 404
@@ -237,7 +242,8 @@ describe('Validators Controller', () => {
       it('should handle missing vote account parameter', async () => {
         req.params = {};
 
-        await expect(getValidatorDetails(req as Request, res as Response)).rejects.toThrow(
+        await getValidatorDetails(req as Request, res as Response, next);
+        expect(next).toHaveBeenCalledWith(
           expect.objectContaining({
             message: 'Valid vote account address is required',
             statusCode: 400
@@ -252,7 +258,7 @@ describe('Validators Controller', () => {
       it('should return recommendations with default parameters', async () => {
         req.query = {};
 
-        await getValidatorRecommendations(req as Request, res as Response);
+        await getValidatorRecommendations(req as Request, res as Response, next);
 
         expect(res.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -287,7 +293,7 @@ describe('Validators Controller', () => {
       it('should include allocation suggestions when amount is provided', async () => {
         req.query = { amount: '100.0', count: '3' };
 
-        await getValidatorRecommendations(req as Request, res as Response);
+        await getValidatorRecommendations(req as Request, res as Response, next);
 
         const call = (res.json as jest.Mock).mock.calls[0][0];
         const recommendations = call.data.recommendations;
@@ -302,7 +308,7 @@ describe('Validators Controller', () => {
         // Test low risk tolerance
         req.query = { riskTolerance: 'low' };
 
-        await getValidatorRecommendations(req as Request, res as Response);
+        await getValidatorRecommendations(req as Request, res as Response, next);
 
         expect(res.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -319,7 +325,7 @@ describe('Validators Controller', () => {
       it('should filter by maxCommission parameter', async () => {
         req.query = { maxCommission: '6.0' };
 
-        await getValidatorRecommendations(req as Request, res as Response);
+        await getValidatorRecommendations(req as Request, res as Response, next);
 
         const call = (res.json as jest.Mock).mock.calls[0][0];
         const recommendations = call.data.recommendations;
@@ -332,7 +338,7 @@ describe('Validators Controller', () => {
       it('should return requested number of recommendations', async () => {
         req.query = { count: '5' };
 
-        await getValidatorRecommendations(req as Request, res as Response);
+        await getValidatorRecommendations(req as Request, res as Response, next);
 
         const call = (res.json as jest.Mock).mock.calls[0][0];
         const recommendations = call.data.recommendations;
@@ -344,7 +350,8 @@ describe('Validators Controller', () => {
       it('should reject invalid risk tolerance', async () => {
         req.query = { riskTolerance: 'invalid' };
 
-        await expect(getValidatorRecommendations(req as Request, res as Response)).rejects.toThrow(
+        await getValidatorRecommendations(req as Request, res as Response, next);
+        expect(next).toHaveBeenCalledWith(
           expect.objectContaining({
             message: expect.stringContaining('Invalid riskTolerance'),
             statusCode: 400
@@ -355,7 +362,7 @@ describe('Validators Controller', () => {
       it('should handle excessive recommendation count', async () => {
         req.query = { count: '20' }; // Max is 10
 
-        await getValidatorRecommendations(req as Request, res as Response);
+        await getValidatorRecommendations(req as Request, res as Response, next);
 
         const call = (res.json as jest.Mock).mock.calls[0][0];
         const recommendations = call.data.recommendations;
@@ -371,7 +378,7 @@ describe('Validators Controller', () => {
           count: '5'
         };
 
-        await getValidatorRecommendations(req as Request, res as Response);
+        await getValidatorRecommendations(req as Request, res as Response, next);
 
         const call = (res.json as jest.Mock).mock.calls[0][0];
         const recommendations = call.data.recommendations;
@@ -383,7 +390,7 @@ describe('Validators Controller', () => {
       it('should handle high risk tolerance with appropriate recommendations', async () => {
         req.query = { riskTolerance: 'high' };
 
-        await getValidatorRecommendations(req as Request, res as Response);
+        await getValidatorRecommendations(req as Request, res as Response, next);
 
         expect(res.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -400,7 +407,7 @@ describe('Validators Controller', () => {
       it('should handle diversification preference', async () => {
         req.query = { diversify: 'false' };
 
-        await getValidatorRecommendations(req as Request, res as Response);
+        await getValidatorRecommendations(req as Request, res as Response, next);
 
         expect(res.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -417,7 +424,7 @@ describe('Validators Controller', () => {
       it('should handle zero amount edge case', async () => {
         req.query = { amount: '0' };
 
-        await getValidatorRecommendations(req as Request, res as Response);
+        await getValidatorRecommendations(req as Request, res as Response, next);
 
         const call = (res.json as jest.Mock).mock.calls[0][0];
         const recommendations = call.data.recommendations;

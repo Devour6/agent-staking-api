@@ -91,7 +91,7 @@ export const registerAgent = asyncHandler(
         description: `Self-registered agent: ${agentName}${description ? ` - ${description}` : ''}`,
         agentName,
         agentWallet,
-        email,
+        ...(email && { email }),
         registeredAt: new Date(),
         selfRegistered: true
       });
@@ -144,7 +144,11 @@ export const getAgentStatus = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const requestId = Math.random().toString(36).substring(2, 15);
     const startTime = Date.now();
-    const { wallet } = req.params;
+    const wallet = req.params.wallet as string;
+
+    if (!wallet) {
+      throw createApiError('Valid wallet address is required', 400, 'MISSING_WALLET');
+    }
 
     logger.info('Checking agent status', {
       requestId,
