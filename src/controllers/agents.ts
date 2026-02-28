@@ -10,6 +10,8 @@ interface AgentRegistrationRequest {
   email?: string;
   description?: string;
   tier?: 'free' | 'pro' | 'enterprise';
+  organization?: string;
+  organizationType?: 'startup' | 'enterprise' | 'government' | 'nonprofit' | 'individual' | 'other';
   agreesToTerms: boolean;
 }
 
@@ -39,6 +41,8 @@ export const registerAgent = asyncHandler(
       email, 
       description, 
       tier = 'free',
+      organization,
+      organizationType,
       agreesToTerms 
     }: AgentRegistrationRequest = req.body;
 
@@ -48,7 +52,9 @@ export const registerAgent = asyncHandler(
       agentWallet: `${agentWallet.substring(0, 4)}...${agentWallet.substring(agentWallet.length - 4)}`,
       tier,
       hasEmail: !!email,
-      hasDescription: !!description
+      hasDescription: !!description,
+      hasOrganization: !!organization,
+      organizationType
     });
 
     try {
@@ -58,20 +64,45 @@ export const registerAgent = asyncHandler(
       // Enterprise registrations require authentication
       if (tier === 'enterprise') {
         const apiKey = req.headers['x-api-key'] as string;
-        if (!apiKey) {
+        if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
           throw createApiError('Enterprise registration requires valid API key authentication', 401, 'AUTHENTICATION_REQUIRED');
         }
         
-        // Verify API key has admin privileges for enterprise registration
-        const keyInfo = await apiKeyManager.getKeyInfo(apiKey);
-        if (!keyInfo || !keyInfo.isActive || keyInfo.tier !== 'admin') {
-          throw createApiError('Enterprise registration requires admin API key', 403, 'INSUFFICIENT_PRIVILEGES');
+        // Validate API key format (basic security check)
+        if (apiKey.length < 32 || !/^[a-zA-Z0-9_-]+$/.test(apiKey)) {
+          throw createApiError('Invalid API key format', 401, 'INVALID_API_KEY');
         }
+        
+        try {
+          // Verify API key has admin privileges for enterprise registration
+          const keyInfo = await apiKeyManager.getKeyInfo(apiKey);
+          if (!keyInfo) {
+            throw createApiError('Invalid API key', 401, 'INVALID_API_KEY');
+          }
+          
+          if (!keyInfo.isActive) {
+            throw createApiError('API key has been deactivated', 401, 'INACTIVE_API_KEY');
+          }
+          
+          if (keyInfo.tier !== 'admin') {
+            throw createApiError('Enterprise registration requires admin API key', 403, 'INSUFFICIENT_PRIVILEGES');
+          }
 
-        logger.info('Enterprise registration authenticated', {
-          requestId,
-          adminKeyId: keyInfo.keyId
-        });
+          logger.info('Enterprise registration authenticated', {
+            requestId,
+            adminKeyId: keyInfo.keyId,
+            adminKeyTier: keyInfo.tier
+          });
+        } catch (error) {
+          if (error && typeof error === 'object' && 'statusCode' in error) {
+            throw error; // Re-throw API errors
+          }
+          logger.error('Authentication service error during enterprise registration', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+          throw createApiError('Authentication service temporarily unavailable', 503, 'SERVICE_UNAVAILABLE');
+        }
       }
 
       // Check if agent wallet is already registered
@@ -88,10 +119,12 @@ export const registerAgent = asyncHandler(
       // Generate API key for the agent
       const newKey = await apiKeyManager.createKey({
         tier,
-        description: `Self-registered agent: ${agentName}${description ? ` - ${description}` : ''}`,
+        description: `Self-registered agent: ${agentName}${description ? ` - ${description}` : ''}${organization ? ` (${organization})` : ''}`,
         agentName,
         agentWallet,
         ...(email && { email }),
+        ...(organization && { organization }),
+        ...(organizationType && { organizationType }),
         registeredAt: new Date(),
         selfRegistered: true
       });
@@ -105,7 +138,9 @@ export const registerAgent = asyncHandler(
         tier,
         processingTime,
         hasEmail: !!email,
-        hasDescription: !!description
+        hasDescription: !!description,
+        hasOrganization: !!organization,
+        organizationType
       });
 
       // Return success response with API key (only returned once)

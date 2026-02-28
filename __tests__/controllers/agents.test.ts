@@ -99,7 +99,7 @@ describe('Agents Controller', () => {
 
     describe('Enterprise tier registration', () => {
       it('should require authentication for enterprise registration', async () => {
-        req.body = { ...validAgentData, tier: 'enterprise' };
+        req.body = { ...validAgentData, tier: 'enterprise', organization: 'Test Corp', organizationType: 'enterprise' };
         req.headers = {}; // No API key
 
         registerAgent(req as Request, res as Response, next);
@@ -112,9 +112,51 @@ describe('Agents Controller', () => {
         );
       });
 
+      it('should reject empty API key for enterprise registration', async () => {
+        req.body = { ...validAgentData, tier: 'enterprise', organization: 'Test Corp', organizationType: 'enterprise' };
+        req.headers = { 'x-api-key': '' }; // Empty API key
+
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
+        expect(next).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Enterprise registration requires valid API key authentication',
+            statusCode: 401
+          })
+        );
+      });
+
+      it('should reject malformed API key for enterprise registration', async () => {
+        req.body = { ...validAgentData, tier: 'enterprise', organization: 'Test Corp', organizationType: 'enterprise' };
+        req.headers = { 'x-api-key': 'invalid@key#format!' }; // Invalid characters
+
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
+        expect(next).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Invalid API key format',
+            statusCode: 401
+          })
+        );
+      });
+
+      it('should reject short API key for enterprise registration', async () => {
+        req.body = { ...validAgentData, tier: 'enterprise', organization: 'Test Corp', organizationType: 'enterprise' };
+        req.headers = { 'x-api-key': 'short' }; // Too short
+
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
+        expect(next).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Invalid API key format',
+            statusCode: 401
+          })
+        );
+      });
+
       it('should require admin API key for enterprise registration', async () => {
-        req.body = { ...validAgentData, tier: 'enterprise' };
-        req.headers = { 'x-api-key': 'non-admin-key' };
+        req.body = { ...validAgentData, tier: 'enterprise', organization: 'Test Corp', organizationType: 'enterprise' };
+        req.headers = { 'x-api-key': 'valid-api-key-format-but-not-admin-1234567890' };
         mockedApiKeyManager.getKeyInfo.mockResolvedValue({
           keyId: 'test-key',
           tier: 'free',
@@ -132,8 +174,8 @@ describe('Agents Controller', () => {
       });
 
       it('should register enterprise agent with valid admin key', async () => {
-        req.body = { ...validAgentData, tier: 'enterprise' };
-        req.headers = { 'x-api-key': 'admin-key' };
+        req.body = { ...validAgentData, tier: 'enterprise', organization: 'Test Corp', organizationType: 'enterprise' };
+        req.headers = { 'x-api-key': 'valid-admin-key-format-1234567890abcdef' };
         mockedApiKeyManager.getKeyInfo.mockResolvedValue({
           keyId: 'admin-key',
           tier: 'admin',
@@ -152,7 +194,9 @@ describe('Agents Controller', () => {
         expect(res.status).toHaveBeenCalledWith(201);
         expect(mockedApiKeyManager.createKey).toHaveBeenCalledWith(
           expect.objectContaining({
-            tier: 'enterprise'
+            tier: 'enterprise',
+            organization: 'Test Corp',
+            organizationType: 'enterprise'
           })
         );
       });
@@ -181,8 +225,8 @@ describe('Agents Controller', () => {
       });
 
       it('should fail with inactive admin key for enterprise registration', async () => {
-        req.body = { ...validAgentData, tier: 'enterprise' };
-        req.headers = { 'x-api-key': 'inactive-admin-key' };
+        req.body = { ...validAgentData, tier: 'enterprise', organization: 'Test Corp', organizationType: 'enterprise' };
+        req.headers = { 'x-api-key': 'valid-format-but-inactive-admin-key-1234567890' };
         mockedApiKeyManager.getKeyInfo.mockResolvedValue({
           keyId: 'admin-key',
           tier: 'admin',
@@ -193,25 +237,90 @@ describe('Agents Controller', () => {
         await flushPromises();
         expect(next).toHaveBeenCalledWith(
           expect.objectContaining({
-            message: 'Enterprise registration requires admin API key',
-            statusCode: 403
+            message: 'API key has been deactivated',
+            statusCode: 401
           })
         );
       });
 
       it('should fail with non-existent API key for enterprise registration', async () => {
-        req.body = { ...validAgentData, tier: 'enterprise' };
-        req.headers = { 'x-api-key': 'non-existent-key' };
+        req.body = { ...validAgentData, tier: 'enterprise', organization: 'Test Corp', organizationType: 'enterprise' };
+        req.headers = { 'x-api-key': 'valid-format-but-non-existent-key-1234567890' };
         mockedApiKeyManager.getKeyInfo.mockResolvedValue(null);
 
         registerAgent(req as Request, res as Response, next);
         await flushPromises();
         expect(next).toHaveBeenCalledWith(
           expect.objectContaining({
-            message: 'Enterprise registration requires admin API key',
-            statusCode: 403
+            message: 'Invalid API key',
+            statusCode: 401
           })
         );
+      });
+
+      it('should handle authentication service errors gracefully', async () => {
+        req.body = { ...validAgentData, tier: 'enterprise', organization: 'Test Corp', organizationType: 'enterprise' };
+        req.headers = { 'x-api-key': 'valid-format-api-key-1234567890abcdef' };
+        mockedApiKeyManager.getKeyInfo.mockRejectedValue(new Error('Database connection timeout'));
+
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
+        expect(next).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Authentication service temporarily unavailable',
+            statusCode: 503
+          })
+        );
+      });
+    });
+
+    describe('Organization field validation', () => {
+      it('should handle organization fields for non-enterprise tiers', async () => {
+        req.body = { ...validAgentData, tier: 'pro', organization: 'Optional Corp', organizationType: 'startup' };
+        mockedApiKeyManager.findKeyByWallet.mockResolvedValue(null);
+        mockedApiKeyManager.createKey.mockResolvedValue({
+          keyId: 'pro-key-id',
+          key: 'pro-api-key',
+          createdAt: new Date()
+        });
+
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
+
+        expect(res.status).toHaveBeenCalledWith(201);
+        expect(mockedApiKeyManager.createKey).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tier: 'pro',
+            organization: 'Optional Corp',
+            organizationType: 'startup'
+          })
+        );
+      });
+
+      it('should handle registration with all organization types', async () => {
+        const organizationTypes = ['startup', 'enterprise', 'government', 'nonprofit', 'individual', 'other'];
+        
+        for (const orgType of organizationTypes) {
+          // Reset mocks for each iteration
+          jest.clearAllMocks();
+          req.body = { ...validAgentData, organization: 'Test Org', organizationType: orgType };
+          mockedApiKeyManager.findKeyByWallet.mockResolvedValue(null);
+          mockedApiKeyManager.createKey.mockResolvedValue({
+            keyId: `${orgType}-key-id`,
+            key: `${orgType}-api-key`,
+            createdAt: new Date()
+          });
+
+          registerAgent(req as Request, res as Response, next);
+          await flushPromises();
+
+          expect(res.status).toHaveBeenCalledWith(201);
+          expect(mockedApiKeyManager.createKey).toHaveBeenCalledWith(
+            expect.objectContaining({
+              organizationType: orgType
+            })
+          );
+        }
       });
     });
 
@@ -231,7 +340,7 @@ describe('Agents Controller', () => {
           agentName: 'Minimal Agent',
           agentWallet: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
           agreesToTerms: true
-          // No email, description, or tier (should default to 'free')
+          // No email, description, tier, or organization (should default to 'free')
         };
         mockedApiKeyManager.findKeyByWallet.mockResolvedValue(null);
         mockedApiKeyManager.createKey.mockResolvedValue({
@@ -250,9 +359,50 @@ describe('Agents Controller', () => {
             agentName: 'Minimal Agent'
           })
         );
-        // email should not be present when not provided
+        // email and organization should not be present when not provided
         const callArgs = mockedApiKeyManager.createKey.mock.calls[0]![0];
         expect(callArgs).not.toHaveProperty('email');
+        expect(callArgs).not.toHaveProperty('organization');
+      });
+
+      it('should handle very long organization names gracefully', async () => {
+        req.body = { 
+          ...validAgentData, 
+          organization: 'A'.repeat(150), // Over 100 char limit 
+          organizationType: 'enterprise' 
+        };
+        mockedApiKeyManager.findKeyByWallet.mockResolvedValue(null);
+        mockedApiKeyManager.createKey.mockResolvedValue({
+          keyId: 'truncated-org-key-id',
+          key: 'truncated-org-api-key',
+          createdAt: new Date()
+        });
+
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
+
+        expect(res.status).toHaveBeenCalledWith(201);
+        // Organization should be truncated by validation middleware
+      });
+
+      it('should handle wallet lookup failures gracefully', async () => {
+        req.body = validAgentData;
+        mockedApiKeyManager.findKeyByWallet.mockRejectedValue(new Error('Database lookup error'));
+
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: 'Database lookup error' }));
+      });
+
+      it('should handle concurrent registrations of same wallet', async () => {
+        req.body = validAgentData;
+        // First call returns null (not found), but by the time createKey is called, another registration completed
+        mockedApiKeyManager.findKeyByWallet.mockResolvedValue(null);
+        mockedApiKeyManager.createKey.mockRejectedValue(new Error('Unique constraint violation'));
+
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: 'Unique constraint violation' }));
       });
     });
   });

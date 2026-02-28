@@ -163,6 +163,24 @@ export const validationSchemas = {
       .default('free')
       .optional()
       .description('API tier (defaults to free)'),
+    organization: Joi.string()
+      .min(2)
+      .max(100)
+      .pattern(/^[a-zA-Z0-9 .,&()-]+$/)
+      .when('tier', {
+        is: 'enterprise',
+        then: Joi.required(),
+        otherwise: Joi.optional()
+      })
+      .description('Organization name (required for enterprise tier, 2-100 characters)'),
+    organizationType: Joi.string()
+      .valid('startup', 'enterprise', 'government', 'nonprofit', 'individual', 'other')
+      .when('organization', {
+        is: Joi.exist(),
+        then: Joi.required(),
+        otherwise: Joi.optional()
+      })
+      .description('Organization type (required when organization is provided)'),
     agreesToTerms: Joi.boolean()
       .valid(true)
       .required()
