@@ -78,7 +78,7 @@ router.get('/admin/api-keys', authenticateApiKey, readOnlyRateLimit, getApiKeys)
 router.post('/admin/api-keys', authenticateApiKey, readOnlyRateLimit, createApiKey);
 router.delete('/admin/api-keys/:keyId', authenticateApiKey, readOnlyRateLimit, revokeApiKey);
 
-// Agent onboarding endpoints (no auth required for registration)
+// Agent onboarding endpoints (auth required for enterprise registrations)
 router.post(
   '/agents/register',
   readOnlyRateLimit,
