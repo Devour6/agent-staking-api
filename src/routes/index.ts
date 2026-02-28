@@ -32,6 +32,15 @@ import {
   createApiKey,
   revokeApiKey
 } from '@/controllers/admin';
+import {
+  registerAgent,
+  getAgentStatus
+} from '@/controllers/agents';
+import {
+  listValidators,
+  getValidatorDetails,
+  getValidatorRecommendations
+} from '@/controllers/validators';
 import { 
   authenticateApiKey, 
   extractAgentWallet 
@@ -43,6 +52,7 @@ import {
 } from '@/middleware/rateLimit';
 import { 
   validateRequest, 
+  validateQuery,
   validationSchemas 
 } from '@/middleware/validation';
 
@@ -67,6 +77,41 @@ router.get('/admin/dashboard', authenticateApiKey, readOnlyRateLimit, getAdminDa
 router.get('/admin/api-keys', authenticateApiKey, readOnlyRateLimit, getApiKeys);
 router.post('/admin/api-keys', authenticateApiKey, readOnlyRateLimit, createApiKey);
 router.delete('/admin/api-keys/:keyId', authenticateApiKey, readOnlyRateLimit, revokeApiKey);
+
+// Agent onboarding endpoints (no auth required for registration)
+router.post(
+  '/agents/register',
+  readOnlyRateLimit,
+  validateRequest(validationSchemas.agentRegistrationRequest),
+  registerAgent
+);
+
+router.get(
+  '/agents/:wallet/status',
+  readOnlyRateLimit,
+  getAgentStatus
+);
+
+// Validator API endpoints (public, no auth required for read operations)
+router.get(
+  '/validators',
+  readOnlyRateLimit,
+  validateQuery(validationSchemas.validatorListQuery),
+  listValidators
+);
+
+router.get(
+  '/validators/recommend',
+  readOnlyRateLimit,
+  validateQuery(validationSchemas.validatorRecommendationsQuery),
+  getValidatorRecommendations
+);
+
+router.get(
+  '/validators/:voteAccount',
+  readOnlyRateLimit,
+  getValidatorDetails
+);
 
 // Authenticated endpoints
 router.use('/stake', authenticateApiKey, extractAgentWallet);
