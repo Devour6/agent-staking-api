@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { logger } from './logger';
 
-export type ApiKeyTier = 'free' | 'pro' | 'enterprise';
+export type ApiKeyTier = 'free' | 'pro' | 'enterprise' | 'admin';
 
 interface ApiKeyInfo {
   keyId: string;
@@ -86,11 +86,11 @@ class ApiKeyManager {
       rotationScheduledAt: new Date(Date.now() + this.rotationIntervalMs),
       tier: options.tier || 'free',
       description: options.description,
-      agentName: options.agentName,
-      agentWallet: options.agentWallet,
-      email: options.email,
-      registeredAt: options.registeredAt,
-      selfRegistered: options.selfRegistered
+      ...(options.agentName && { agentName: options.agentName }),
+      ...(options.agentWallet && { agentWallet: options.agentWallet }),
+      ...(options.email && { email: options.email }),
+      ...(options.registeredAt && { registeredAt: options.registeredAt }),
+      ...(options.selfRegistered !== undefined && { selfRegistered: options.selfRegistered })
     };
 
     this.keys.set(keyId, keyInfo);
@@ -126,6 +126,19 @@ class ApiKeyManager {
 
     logger.warn('Invalid API key attempted', { hashedKey: hashedKey.substring(0, 8) + '...' });
     return { valid: false };
+  }
+
+  /**
+   * Get key info by raw API key
+   */
+  async getKeyInfo(apiKey: string): Promise<ApiKeyInfo | null> {
+    const hashedKey = this.hashKey(apiKey);
+    for (const keyInfo of this.keys.values()) {
+      if (keyInfo.hashedKey === hashedKey) {
+        return keyInfo;
+      }
+    }
+    return null;
   }
 
   /**
@@ -250,7 +263,7 @@ class ApiKeyManager {
           isActive: keyInfo.isActive,
           tier: keyInfo.tier,
           description: keyInfo.description,
-          agentName: keyInfo.agentName
+          ...(keyInfo.agentName && { agentName: keyInfo.agentName })
         };
       }
     }
@@ -302,13 +315,13 @@ class ApiKeyManager {
     createdAt: Date;
   }> {
     const { keyId, apiKey } = this.generateApiKey({
-      tier: options.tier,
-      description: options.description,
-      agentName: options.agentName,
-      agentWallet: options.agentWallet,
-      email: options.email,
-      registeredAt: options.registeredAt,
-      selfRegistered: options.selfRegistered
+      ...(options.tier && { tier: options.tier }),
+      ...(options.description && { description: options.description }),
+      ...(options.agentName && { agentName: options.agentName }),
+      ...(options.agentWallet && { agentWallet: options.agentWallet }),
+      ...(options.email && { email: options.email }),
+      ...(options.registeredAt && { registeredAt: options.registeredAt }),
+      ...(options.selfRegistered !== undefined && { selfRegistered: options.selfRegistered })
     });
     const keyInfo = this.keys.get(keyId)!;
     

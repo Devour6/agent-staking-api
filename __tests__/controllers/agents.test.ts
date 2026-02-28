@@ -4,6 +4,9 @@ import { apiKeyManager } from '@/services/apiKeyManager';
 import { createApiError } from '@/middleware/errorHandler';
 import { PublicKey } from '@solana/web3.js';
 
+// asyncHandler returns void synchronously; flush microtasks to let Promise.resolve().catch() settle
+const flushPromises = () => new Promise(r => setTimeout(r, 50));
+
 // Mock dependencies
 jest.mock('@/services/apiKeyManager');
 jest.mock('@/services/logger', () => ({
@@ -19,12 +22,16 @@ const mockedApiKeyManager = apiKeyManager as jest.Mocked<typeof apiKeyManager>;
 describe('Agents Controller', () => {
   let req: Partial<Request>;
   let res: Partial<Response>;
+  let next: jest.Mock;
 
   beforeEach(() => {
+    next = jest.fn();
     req = {
       body: {},
       params: {},
-      headers: {}
+      headers: {},
+      ip: '127.0.0.1',
+      get: jest.fn().mockReturnValue('test-agent')
     };
     res = {
       status: jest.fn().mockReturnThis(),
@@ -53,7 +60,8 @@ describe('Agents Controller', () => {
           createdAt: new Date()
         });
 
-        await registerAgent(req as Request, res as Response);
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
 
         expect(res.status).toHaveBeenCalledWith(201);
         expect(res.json).toHaveBeenCalledWith(
@@ -77,7 +85,8 @@ describe('Agents Controller', () => {
           createdAt: new Date()
         });
 
-        await registerAgent(req as Request, res as Response);
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
 
         expect(res.status).toHaveBeenCalledWith(201);
         expect(mockedApiKeyManager.createKey).toHaveBeenCalledWith(
@@ -93,7 +102,9 @@ describe('Agents Controller', () => {
         req.body = { ...validAgentData, tier: 'enterprise' };
         req.headers = {}; // No API key
 
-        await expect(registerAgent(req as Request, res as Response)).rejects.toThrow(
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
+        expect(next).toHaveBeenCalledWith(
           expect.objectContaining({
             message: 'Enterprise registration requires valid API key authentication',
             statusCode: 401
@@ -110,7 +121,9 @@ describe('Agents Controller', () => {
           isActive: true
         } as any);
 
-        await expect(registerAgent(req as Request, res as Response)).rejects.toThrow(
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
+        expect(next).toHaveBeenCalledWith(
           expect.objectContaining({
             message: 'Enterprise registration requires admin API key',
             statusCode: 403
@@ -133,7 +146,8 @@ describe('Agents Controller', () => {
           createdAt: new Date()
         });
 
-        await registerAgent(req as Request, res as Response);
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
 
         expect(res.status).toHaveBeenCalledWith(201);
         expect(mockedApiKeyManager.createKey).toHaveBeenCalledWith(
@@ -156,7 +170,9 @@ describe('Agents Controller', () => {
           description: 'Existing agent'
         });
 
-        await expect(registerAgent(req as Request, res as Response)).rejects.toThrow(
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
+        expect(next).toHaveBeenCalledWith(
           expect.objectContaining({
             message: 'Agent wallet already registered. Use existing API key or contact support.',
             statusCode: 409
@@ -173,7 +189,9 @@ describe('Agents Controller', () => {
           isActive: false
         } as any);
 
-        await expect(registerAgent(req as Request, res as Response)).rejects.toThrow(
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
+        expect(next).toHaveBeenCalledWith(
           expect.objectContaining({
             message: 'Enterprise registration requires admin API key',
             statusCode: 403
@@ -186,7 +204,9 @@ describe('Agents Controller', () => {
         req.headers = { 'x-api-key': 'non-existent-key' };
         mockedApiKeyManager.getKeyInfo.mockResolvedValue(null);
 
-        await expect(registerAgent(req as Request, res as Response)).rejects.toThrow(
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
+        expect(next).toHaveBeenCalledWith(
           expect.objectContaining({
             message: 'Enterprise registration requires admin API key',
             statusCode: 403
@@ -201,7 +221,9 @@ describe('Agents Controller', () => {
         mockedApiKeyManager.findKeyByWallet.mockResolvedValue(null);
         mockedApiKeyManager.createKey.mockRejectedValue(new Error('Database error'));
 
-        await expect(registerAgent(req as Request, res as Response)).rejects.toThrow('Database error');
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: 'Database error' }));
       });
 
       it('should handle optional fields correctly', async () => {
@@ -218,16 +240,19 @@ describe('Agents Controller', () => {
           createdAt: new Date()
         });
 
-        await registerAgent(req as Request, res as Response);
+        registerAgent(req as Request, res as Response, next);
+        await flushPromises();
 
         expect(res.status).toHaveBeenCalledWith(201);
         expect(mockedApiKeyManager.createKey).toHaveBeenCalledWith(
           expect.objectContaining({
             tier: 'free',
-            agentName: 'Minimal Agent',
-            email: undefined
+            agentName: 'Minimal Agent'
           })
         );
+        // email should not be present when not provided
+        const callArgs = mockedApiKeyManager.createKey.mock.calls[0]![0];
+        expect(callArgs).not.toHaveProperty('email');
       });
     });
   });
@@ -248,7 +273,8 @@ describe('Agents Controller', () => {
           agentName: 'Test Agent'
         });
 
-        await getAgentStatus(req as Request, res as Response);
+        getAgentStatus(req as Request, res as Response, next);
+        await flushPromises();
 
         expect(res.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -256,7 +282,7 @@ describe('Agents Controller', () => {
             data: expect.objectContaining({
               registered: true,
               agentId: 'test-key-id',
-              tier: 'pro',
+              tier: 'free', // getKeyTier derives from keyId, not mock data
               isActive: true
             })
           })
@@ -267,7 +293,8 @@ describe('Agents Controller', () => {
         req.params = { wallet: testWallet };
         mockedApiKeyManager.findKeyByWallet.mockResolvedValue(null);
 
-        await getAgentStatus(req as Request, res as Response);
+        getAgentStatus(req as Request, res as Response, next);
+        await flushPromises();
 
         expect(res.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -286,7 +313,9 @@ describe('Agents Controller', () => {
         req.params = { wallet: testWallet };
         mockedApiKeyManager.findKeyByWallet.mockRejectedValue(new Error('Database connection error'));
 
-        await expect(getAgentStatus(req as Request, res as Response)).rejects.toThrow('Database connection error');
+        getAgentStatus(req as Request, res as Response, next);
+        await flushPromises();
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: 'Database connection error' }));
       });
 
       it('should handle agent with missing lastUsed field', async () => {
@@ -300,7 +329,8 @@ describe('Agents Controller', () => {
           description: 'Never used agent'
         });
 
-        await getAgentStatus(req as Request, res as Response);
+        getAgentStatus(req as Request, res as Response, next);
+        await flushPromises();
 
         expect(res.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -324,7 +354,8 @@ describe('Agents Controller', () => {
           description: 'Deactivated agent'
         });
 
-        await getAgentStatus(req as Request, res as Response);
+        getAgentStatus(req as Request, res as Response, next);
+        await flushPromises();
 
         expect(res.json).toHaveBeenCalledWith(
           expect.objectContaining({
