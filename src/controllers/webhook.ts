@@ -76,20 +76,21 @@ export const registerWebhook = asyncHandler(
         );
       }
 
-      // Generate webhook secret if not provided
-      const webhookSecret = secret || generateWebhookSecret();
-
-      // Create webhook registration
+      // Create webhook registration first to get ID
       const webhook: WebhookRegistration = {
         id: generateWebhookId(),
         apiKey,
         url,
         events,
-        secret: webhookSecret,
+        secret: '', // Will be set below
         active: true,
         createdAt: new Date().toISOString(),
         failureCount: 0,
       };
+
+      // Generate or use provided webhook secret with persistence
+      const webhookSecret = secret || await storage.generateWebhookSecret(webhook.id);
+      webhook.secret = webhookSecret;
 
       await storage.saveWebhook(webhook);
 

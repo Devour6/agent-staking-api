@@ -9,14 +9,12 @@
       "validatorVoteAccount": "test-validator",
       "agentWallet": "test-agent",
       "stakeAccount": "test-stake",
-      "timestamp": "2026-02-28T17:15:32.689Z"
+      "timestamp": "2026-03-01T14:11:20.897Z"
     },
     "attempt": 2,
-    "status": "success",
-    "createdAt": "2026-02-28T17:15:32.689Z",
-    "responseStatus": 200,
-    "responseBody": "OK",
-    "deliveredAt": "2026-02-28T17:15:32.691Z"
+    "status": "failed",
+    "createdAt": "2026-03-01T14:11:20.897Z",
+    "nextRetryAt": "2026-03-01T14:11:22.989Z"
   },
   {
     "id": "max-retries-delivery-id",
@@ -28,10 +26,10 @@
       "validatorVoteAccount": "test-validator",
       "agentWallet": "test-agent",
       "stakeAccount": "test-stake",
-      "timestamp": "2026-02-28T17:15:32.692Z"
+      "timestamp": "2026-03-01T14:11:20.933Z"
     },
     "attempt": 3,
     "status": "max_retries_reached",
-    "createdAt": "2026-02-28T17:15:32.692Z"
+    "createdAt": "2026-03-01T14:11:20.933Z"
   }
 ]

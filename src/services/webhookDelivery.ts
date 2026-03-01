@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { request } from 'undici';
 import { storage } from '@/services/storage';
 import { logger } from '@/services/logger';
 import { 
@@ -100,12 +101,13 @@ export class WebhookDeliveryService {
         },
       };
 
-      const signature = this.generateSignature(payload, webhook.secret);
+      const webhookSecret = await storage.getActiveWebhookSecret(webhook.id);
+      if (!webhookSecret) {
+        throw new Error(`No active secret found for webhook ${webhook.id}`);
+      }
+      const signature = this.generateSignature(payload, webhookSecret);
       
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.deliveryTimeoutMs);
-
-      const response = await fetch(webhook.url, {
+      const response = await request(webhook.url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -115,15 +117,14 @@ export class WebhookDeliveryService {
           'User-Agent': 'Phase-Webhooks/1.0',
         },
         body: JSON.stringify(payload),
-        signal: controller.signal,
+        bodyTimeout: this.deliveryTimeoutMs,
+        headersTimeout: this.deliveryTimeoutMs,
       });
 
-      clearTimeout(timeoutId);
+      delivery.responseStatus = response.statusCode;
+      delivery.responseBody = await response.body.text().catch(() => '');
 
-      delivery.responseStatus = response.status;
-      delivery.responseBody = await response.text().catch(() => '');
-
-      if (response.ok) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         delivery.status = 'success';
         delivery.deliveredAt = new Date().toISOString();
         
@@ -134,7 +135,7 @@ export class WebhookDeliveryService {
         logger.info('Webhook delivered successfully', {
           deliveryId: delivery.id,
           webhookId: delivery.webhookId,
-          responseStatus: response.status,
+          responseStatus: response.statusCode,
           attempt: delivery.attempt,
         });
       } else {
@@ -205,12 +206,13 @@ export class WebhookDeliveryService {
         },
       };
 
-      const signature = this.generateSignature(payload, webhook.secret);
+      const webhookSecret = await storage.getActiveWebhookSecret(webhook.id);
+      if (!webhookSecret) {
+        throw new Error(`No active secret found for webhook ${webhook.id}`);
+      }
+      const signature = this.generateSignature(payload, webhookSecret);
       
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.deliveryTimeoutMs);
-
-      const response = await fetch(webhook.url, {
+      const response = await request(webhook.url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -220,15 +222,14 @@ export class WebhookDeliveryService {
           'User-Agent': 'Phase-Webhooks/1.0',
         },
         body: JSON.stringify(payload),
-        signal: controller.signal,
+        bodyTimeout: this.deliveryTimeoutMs,
+        headersTimeout: this.deliveryTimeoutMs,
       });
 
-      clearTimeout(timeoutId);
+      delivery.responseStatus = response.statusCode;
+      delivery.responseBody = await response.body.text().catch(() => '');
 
-      delivery.responseStatus = response.status;
-      delivery.responseBody = await response.text().catch(() => '');
-
-      if (response.ok) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         delivery.status = 'success';
         delivery.deliveredAt = new Date().toISOString();
         
@@ -240,7 +241,7 @@ export class WebhookDeliveryService {
         logger.info('Webhook delivered successfully', {
           deliveryId: delivery.id,
           webhookId: delivery.webhookId,
-          responseStatus: response.status,
+          responseStatus: response.statusCode,
           attempt: delivery.attempt,
         });
 

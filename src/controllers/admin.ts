@@ -659,7 +659,7 @@ function getKeyTier(keyId: string): string {
 
 interface RateLimitKeyStats {
   keyId: string;
-  tier: 'free' | 'pro' | 'enterprise';
+  tier: 'free' | 'pro' | 'enterprise' | 'admin';
   isActive: boolean;
   lastUsed: Date | undefined;
   limits: {
