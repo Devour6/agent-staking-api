@@ -49,7 +49,7 @@ export const registerAgent = asyncHandler(
     logger.info('Processing agent registration', {
       requestId,
       agentName,
-      agentWallet: `${agentWallet.substring(0, 4)}...${agentWallet.substring(agentWallet.length - 4)}`,
+      agentWallet: agentWallet ? `${agentWallet.substring(0, 4)}...${agentWallet.substring(agentWallet.length - 4)}` : 'undefined',
       tier,
       hasEmail: !!email,
       hasDescription: !!description,
@@ -110,7 +110,7 @@ export const registerAgent = asyncHandler(
       if (existingKey) {
         logger.warn('Attempted registration of existing wallet', {
           requestId,
-          agentWallet: `${agentWallet.substring(0, 4)}...${agentWallet.substring(agentWallet.length - 4)}`,
+          agentWallet: agentWallet ? `${agentWallet.substring(0, 4)}...${agentWallet.substring(agentWallet.length - 4)}` : 'undefined',
           existingKeyId: existingKey.keyId
         });
         throw createApiError('Agent wallet already registered. Use existing API key or contact support.', 409, 'WALLET_ALREADY_REGISTERED');
