@@ -16,7 +16,14 @@ const configSchema = Joi.object({
   PHASE_VALIDATOR_VOTE_ACCOUNT: Joi.string().required(),
   RAKE_FEE_BASIS_POINTS: Joi.number().min(0).max(10000).default(10),
   PHASE_YIELD_STAKE_POOL_MINT: Joi.string().default('phaseZSfPxTDBpiVb96H4XFSD8xHeHxZre5HerehBJG'),
-  PHASE_YIELD_STAKE_POOL_ADDRESS: Joi.string().optional(),
+  PHASE_YIELD_STAKE_POOL_ADDRESS: Joi.string().when('SOLANA_CLUSTER', {
+    is: 'mainnet-beta',
+    then: Joi.required().messages({
+      'any.required': 'PHASE_YIELD_STAKE_POOL_ADDRESS is required for mainnet deployment',
+      'string.empty': 'PHASE_YIELD_STAKE_POOL_ADDRESS cannot be empty'
+    }),
+    otherwise: Joi.optional()
+  }),
   
   API_KEY_SECRET: Joi.string().min(32).required(),
   

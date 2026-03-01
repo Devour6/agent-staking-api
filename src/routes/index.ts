@@ -17,7 +17,6 @@ import {
   getWebhookDeliveries
 } from '@/controllers/webhook';
 import {
-  registerAgent,
   getAgentProfile,
   updateAgentProfile,
   acceptTerms
@@ -87,13 +86,6 @@ router.post('/admin/api-keys', authenticateApiKey, readOnlyRateLimit, createApiK
 router.delete('/admin/api-keys/:keyId', authenticateApiKey, readOnlyRateLimit, revokeApiKey);
 
 // Agent onboarding endpoints (auth required for enterprise registrations)
-router.post(
-  '/agents/register',
-  readOnlyRateLimit,
-  validateRequest(validationSchemas.agentRegistrationRequest),
-  registerAgent
-);
-
 router.get(
   '/agents/:wallet/status',
   readOnlyRateLimit,

@@ -1,0 +1,52 @@
+# Prometheus Configuration for Agent Staking API Production
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "alerts.yml"
+
+scrape_configs:
+  # API Server metrics
+  - job_name: 'agent-staking-api'
+    static_configs:
+      - targets: ['api:3000']
+    scrape_interval: 10s
+    metrics_path: /metrics
+    
+  # Redis metrics
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+
+  # Nginx metrics (if nginx-prometheus-exporter is added)
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:9113']
+    scrape_interval: 30s
+    
+  # Node exporter (system metrics)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Storage configuration
+storage:
+  tsdb:
+    retention.time: 30d
+    retention.size: 1GB
