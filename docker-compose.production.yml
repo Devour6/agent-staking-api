@@ -1,0 +1,353 @@
+# Phase Agent Staking API - Production Docker Compose Configuration
+# 
+# This configuration deploys the Phase Staking API with production-grade settings:
+# - Production environment variables
+# - Health checks and monitoring
+# - Proper logging and volume mounts
+# - Redis caching layer
+# - Reverse proxy with SSL
+# - Security hardening
+#
+# Deploy with: docker-compose -f docker-compose.production.yml up -d
+
+version: '3.8'
+
+services:
+  # ===============================
+  # PHASE STAKING API - MAIN SERVICE
+  # ===============================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+      args:
+        NODE_ENV: production
+    container_name: phase-staking-api-prod
+    restart: unless-stopped
+    
+    # Environment & Configuration
+    env_file:
+      - .env.production
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://postgres:production_password@postgres:5432/phase_staking
+    
+    # Networking
+    ports:
+      - "3000:3000"
+    networks:
+      - phase-network
+    
+    # Health Monitoring
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    
+    # Resource Limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    
+    # Volume Mounts
+    volumes:
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    
+    # Security
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    
+    # Dependencies
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+        labels: "service=phase-staking-api,env=production"
+
+  # ===============================
+  # REDIS - CACHING & SESSION STORE
+  # ===============================
+  redis:
+    image: redis:7-alpine
+    container_name: phase-redis-prod
+    restart: unless-stopped
+    
+    # Configuration
+    command: >
+      redis-server 
+      --requirepass production_redis_password_change_me
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    
+    # Networking
+    ports:
+      - "127.0.0.1:6379:6379"
+    networks:
+      - phase-network
+    
+    # Persistence
+    volumes:
+      - redis-data:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    
+    # Health Check
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    
+    # Security
+    security_opt:
+      - no-new-privileges:true
+    
+    # Resource Limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+
+  # ===============================
+  # POSTGRESQL - ANALYTICS & LOGGING
+  # ===============================
+  postgres:
+    image: postgres:15-alpine
+    container_name: phase-postgres-prod
+    restart: unless-stopped
+    
+    # Configuration
+    environment:
+      POSTGRES_DB: phase_staking
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: production_password_change_me
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    
+    # Networking
+    ports:
+      - "127.0.0.1:5432:5432"
+    networks:
+      - phase-network
+    
+    # Persistence
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./sql/init:/docker-entrypoint-initdb.d:ro
+      - ./backups/postgres:/backups
+    
+    # Health Check
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d phase_staking"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Security
+    security_opt:
+      - no-new-privileges:true
+    
+    # Performance tuning
+    command: >
+      postgres
+      -c max_connections=100
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+
+  # ===============================
+  # NGINX - REVERSE PROXY & SSL
+  # ===============================
+  nginx:
+    image: nginx:alpine
+    container_name: phase-nginx-prod
+    restart: unless-stopped
+    
+    # Networking  
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - phase-network
+    
+    # Configuration
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
+    
+    # Dependencies
+    depends_on:
+      - api
+    
+    # Health Check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===============================
+  # PROMETHEUS - METRICS COLLECTION
+  # ===============================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: phase-prometheus-prod
+    restart: unless-stopped
+    
+    # Configuration
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    
+    # Networking
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - phase-network
+    
+    # Configuration & Data
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    
+    # Health Check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===============================
+  # GRAFANA - MONITORING DASHBOARDS  
+  # ===============================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: phase-grafana-prod
+    restart: unless-stopped
+    
+    # Configuration
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=secure_grafana_password_change_me
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://monitoring.phase.finance
+    
+    # Networking
+    ports:
+      - "127.0.0.1:3001:3000"
+    networks:
+      - phase-network
+    
+    # Data Persistence
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    
+    # Dependencies
+    depends_on:
+      - prometheus
+
+# ===============================
+# NETWORKS
+# ===============================
+networks:
+  phase-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.enable_ipv6: "false"
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+
+# ===============================
+# PERSISTENT VOLUMES
+# ===============================
+volumes:
+  redis-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/redis
+  
+  postgres-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/postgres
+  
+  prometheus-data:
+    driver: local
+    driver_opts:
+      type: none 
+      o: bind
+      device: ./data/prometheus
+  
+  grafana-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/grafana
+
+# ===============================
+# DEPLOYMENT NOTES
+# ===============================
+# 
+# Pre-deployment checklist:
+# 1. Update .env.production with real values
+# 2. Generate SSL certificates in ./ssl/ directory
+# 3. Create data directories: mkdir -p data/{redis,postgres,prometheus,grafana}
+# 4. Update nginx configuration with real domains
+# 5. Set up monitoring dashboards in Grafana
+# 6. Configure backup scripts for postgres data
+# 7. Set up log rotation for application logs
+# 8. Configure firewall rules for production
+# 
+# Deploy commands:
+# docker-compose -f docker-compose.production.yml pull
+# docker-compose -f docker-compose.production.yml up -d
+# docker-compose -f docker-compose.production.yml logs -f api
+# 
+# Health check:
+# curl -f https://your-domain.com/health
+# 
+# Monitoring:
+# https://your-domain.com:3001 (Grafana)
+# http://localhost:9090 (Prometheus)
+#

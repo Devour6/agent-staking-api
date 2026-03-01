@@ -1,0 +1,159 @@
+# Phase Agent Staking API - Production Dockerfile
+# Optimized for mainnet deployment with security and performance best practices
+#
+# Build: docker build -f Dockerfile.production -t phase-staking-api:mainnet .
+# Run:   docker run -d --env-file .env.production -p 3000:3000 phase-staking-api:mainnet
+
+# ===============================
+# STAGE 1: Build Dependencies
+# ===============================
+FROM node:18-alpine AS dependencies
+
+# Install system dependencies for building native modules
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    git \
+    curl \
+    && ln -sf python3 /usr/bin/python
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files first for better layer caching
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production --no-audit --no-fund
+
+# ===============================
+# STAGE 2: Build Application
+# ===============================
+FROM node:18-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json tsconfig*.json ./
+
+# Install all dependencies (including devDependencies for building)
+RUN npm ci --no-audit --no-fund
+
+# Copy source code
+COPY src/ ./src/
+COPY __tests__/ ./__tests__/
+
+# Build TypeScript to JavaScript
+RUN npm run build
+
+# Run tests to ensure build is valid
+RUN npm test
+
+# ===============================
+# STAGE 3: Production Runtime
+# ===============================
+FROM node:18-alpine AS runtime
+
+# Install runtime security updates and utilities
+RUN apk update && apk upgrade && \
+    apk add --no-cache \
+    curl \
+    dumb-init \
+    ca-certificates \
+    tzdata \
+    && rm -rf /var/cache/apk/*
+
+# Set timezone to UTC for consistent logging
+ENV TZ=UTC
+
+# Create app user for security (non-root)
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 -G nodejs
+
+# Create application directory with proper permissions
+WORKDIR /app
+RUN chown -R nodejs:nodejs /app
+
+# Copy production dependencies from dependencies stage
+COPY --from=dependencies --chown=nodejs:nodejs /app/node_modules ./node_modules
+
+# Copy built application from builder stage
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/package*.json ./
+
+# Copy additional production files
+COPY --chown=nodejs:nodejs README.md ./
+COPY --chown=nodejs:nodejs LICENSE ./
+
+# Create directories for logs and data with proper permissions
+RUN mkdir -p /app/logs /app/data && \
+    chown -R nodejs:nodejs /app/logs /app/data
+
+# Set proper file permissions
+RUN chmod 755 /app && \
+    chmod 755 /app/dist && \
+    chmod 644 /app/dist/*.js && \
+    chmod 755 /app/logs && \
+    chmod 755 /app/data
+
+# Switch to non-root user
+USER nodejs
+
+# Environment variables for production
+ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=2048 --enable-source-maps"
+ENV UV_THREADPOOL_SIZE=16
+
+# Health check endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
+
+# Expose port
+EXPOSE 3000
+
+# Add labels for better container management
+LABEL maintainer="Phase Labs <engineering@phaselabs.io>"
+LABEL version="1.0.0"
+LABEL description="Phase Agent Staking API - Mainnet Production"
+LABEL org.opencontainers.image.source="https://github.com/Devour6/agent-staking-api"
+LABEL org.opencontainers.image.documentation="https://docs.phase.finance/api"
+LABEL org.opencontainers.image.vendor="Phase Labs"
+LABEL org.opencontainers.image.licenses="MIT"
+
+# Start application with dumb-init for proper signal handling
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "dist/index.js"]
+
+# ===============================
+# PRODUCTION DEPLOYMENT NOTES
+# ===============================
+#
+# Security features:
+# - Multi-stage build to minimize attack surface
+# - Non-root user execution
+# - Minimal Alpine base image  
+# - Security updates installed
+# - Proper file permissions
+# - No unnecessary packages
+#
+# Performance optimizations:
+# - Production-only dependencies
+# - Optimized Node.js memory settings
+# - Increased UV thread pool size
+# - Layer caching optimization
+#
+# Operational features:
+# - Health check endpoint
+# - Proper signal handling with dumb-init
+# - Structured logging directories
+# - Container labels for management
+#
+# Build and deployment:
+# docker build -f Dockerfile.production -t phase-staking-api:mainnet-1.0.0 .
+# docker tag phase-staking-api:mainnet-1.0.0 phase-staking-api:mainnet-latest
+# docker run -d --name phase-api-prod --env-file .env.production -p 3000:3000 phase-staking-api:mainnet-latest
+#

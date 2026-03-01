@@ -1,0 +1,438 @@
+# Phase Agent Staking API - Kubernetes Production Deployment
+# Optimized for mainnet deployment with high availability and security
+#
+# Deploy: kubectl apply -f k8s/production-deployment.yml
+# Monitor: kubectl get pods -l app=phase-staking-api -w
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: phase-production
+  labels:
+    name: phase-production
+    environment: production
+    project: phase-staking-api
+
+---
+# ===============================
+# CONFIG MAP - Non-sensitive configuration
+# ===============================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: phase-staking-config
+  namespace: phase-production
+  labels:
+    app: phase-staking-api
+    version: "1.0.0"
+    environment: production
+data:
+  # Server Configuration
+  PORT: "3000"
+  NODE_ENV: "production"
+  ENVIRONMENT: "mainnet"
+  
+  # Solana Configuration
+  SOLANA_CLUSTER: "mainnet-beta"
+  SOLANA_RPC_URL_BACKUP: "https://api.mainnet-beta.solana.com"
+  SOLANA_RPC_URL_TERTIARY: "https://solana-api.projectserum.com"
+  SOLANA_RPC_URL_QUATERNARY: "https://rpc.ankr.com/solana"
+  
+  # Rate Limiting
+  RATE_LIMIT_WINDOW_MS: "60000"
+  RATE_LIMIT_MAX_REQUESTS: "50"
+  RATE_LIMIT_MAX_REQUESTS_AUTH: "200"
+  
+  # Logging
+  LOG_LEVEL: "info"
+  LOG_FILE: "logs/production.log"
+  ERROR_LOG_FILE: "logs/error.log"
+  
+  # Health Checks
+  HEALTH_CHECK_TIMEOUT_MS: "10000"
+  HEALTH_CHECK_INTERVAL_MS: "30000"
+  
+  # Performance
+  NODE_OPTIONS: "--max-old-space-size=2048 --enable-source-maps"
+  UV_THREADPOOL_SIZE: "16"
+  
+  # Features
+  ENABLE_LIQUID_STAKING: "true"
+  ENABLE_AUTO_COMPOUNDING: "true"
+  ENABLE_ADVANCED_ANALYTICS: "true"
+  
+  # CORS
+  CORS_ORIGINS: "https://app.phase.finance,https://dashboard.phase.finance"
+
+---
+# ===============================
+# SECRET - Sensitive configuration
+# ===============================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: phase-staking-secrets
+  namespace: phase-production
+  labels:
+    app: phase-staking-api
+    version: "1.0.0"
+    environment: production
+type: Opaque
+data:
+  # Base64 encoded values - replace with actual production secrets
+  # Use: echo -n "your-secret" | base64
+  SOLANA_RPC_URL: aHR0cHM6Ly9zb2xhbmEtbWFpbm5ldC5nLmFsY2hlbXkuY29tL3YyL3lvdXItYXBpLWtleQ==
+  PHASE_FEE_WALLET: UGhhc2VMYWJzVHJlYXN1cnlXYWxsZXRNYWlubmV0UHVibGljS2V5MTIzNDU2Nzg5MA==
+  PHASE_VALIDATOR_VOTE_ACCOUNT: UGhhc2VWYWxpZGF0b3JWb3RlQWNjb3VudE1haW5uZXRQdWJLZXkxMjM0NTY3ODkw
+  API_KEY_SECRET: cHJvZHVjdGlvbi1hcGkta2V5LXNlY3JldC0zMi1jaGFycy1taW5pbXVtLWNoYW5nZS1tZQ==
+  JWT_SECRET: and0LXByb2R1Y3Rpb24tc2VjcmV0LTMyLWNoYXJzLW1pbmltdW0=
+  REDIS_PASSWORD: cHJvZHVjdGlvbl9yZWRpc19wYXNzd29yZF9jaGFuZ2VfbWU=
+  DATABASE_URL: cG9zdGdyZXNxbDovL3BoYXNlX3VzZXI6cHJvZHVjdGlvbl9wYXNzd29yZEBkYi5waGFzZS5maW5hbmNlOjU0MzIvcGhhc2Vfc3Rha2luZw==
+  SENTRY_DSN: aHR0cHM6Ly95b3VyLXNlbnRyeS1kc24taGVyZUBzZW50cnkuaW8vcHJvamVjdC1pZA==
+
+---
+# ===============================
+# DEPLOYMENT - Main application
+# ===============================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phase-staking-api
+  namespace: phase-production
+  labels:
+    app: phase-staking-api
+    version: "1.0.0"
+    environment: production
+    tier: backend
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: phase-staking-api
+  template:
+    metadata:
+      labels:
+        app: phase-staking-api
+        version: "1.0.0"
+        environment: production
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Security Context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        
+      # Service Account
+      serviceAccountName: phase-staking-api-sa
+      
+      # Image Pull Secrets
+      imagePullSecrets:
+        - name: phase-registry-secret
+      
+      # Containers
+      containers:
+      - name: api
+        image: phase-staking-api:mainnet-1.0.0
+        imagePullPolicy: Always
+        
+        # Ports
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        
+        # Environment Variables
+        envFrom:
+        - configMapRef:
+            name: phase-staking-config
+        - secretRef:
+            name: phase-staking-secrets
+        
+        # Resource Limits
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+            ephemeral-storage: "2Gi"
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+            ephemeral-storage: "1Gi"
+        
+        # Health Checks
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+          successThreshold: 1
+        
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+          successThreshold: 1
+        
+        # Volume Mounts
+        volumeMounts:
+        - name: logs-volume
+          mountPath: /app/logs
+        - name: config-volume
+          mountPath: /app/config
+          readOnly: true
+        
+        # Security Context
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      
+      # Volumes
+      volumes:
+      - name: logs-volume
+        emptyDir:
+          sizeLimit: "1Gi"
+      - name: config-volume
+        configMap:
+          name: phase-staking-config
+      
+      # Pod Disruption Budget
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - phase-staking-api
+              topologyKey: kubernetes.io/hostname
+      
+      # Tolerations and Node Selector
+      nodeSelector:
+        node-type: api
+      tolerations:
+      - key: "api-nodes"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+
+---
+# ===============================
+# SERVICE - Load balancer
+# ===============================
+apiVersion: v1
+kind: Service
+metadata:
+  name: phase-staking-api-service
+  namespace: phase-production
+  labels:
+    app: phase-staking-api
+    version: "1.0.0"
+    environment: production
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: /health
+spec:
+  type: LoadBalancer
+  selector:
+    app: phase-staking-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: http
+    protocol: TCP
+
+---
+# ===============================
+# HORIZONTAL POD AUTOSCALER
+# ===============================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: phase-staking-api-hpa
+  namespace: phase-production
+  labels:
+    app: phase-staking-api
+    environment: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: phase-staking-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 120
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 120
+
+---
+# ===============================
+# POD DISRUPTION BUDGET
+# ===============================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: phase-staking-api-pdb
+  namespace: phase-production
+  labels:
+    app: phase-staking-api
+    environment: production
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: phase-staking-api
+
+---
+# ===============================
+# SERVICE ACCOUNT
+# ===============================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: phase-staking-api-sa
+  namespace: phase-production
+  labels:
+    app: phase-staking-api
+    environment: production
+automountServiceAccountToken: false
+
+---
+# ===============================
+# INGRESS - External traffic routing
+# ===============================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: phase-staking-api-ingress
+  namespace: phase-production
+  labels:
+    app: phase-staking-api
+    environment: production
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.2 TLSv1.3"
+    nginx.ingress.kubernetes.io/ssl-ciphers: "ECDHE-ECDSA-AES128-GCM-SHA256,ECDHE-RSA-AES128-GCM-SHA256"
+spec:
+  tls:
+  - hosts:
+    - api.phase.finance
+    secretName: phase-api-tls
+  rules:
+  - host: api.phase.finance
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: phase-staking-api-service
+            port:
+              number: 80
+
+---
+# ===============================
+# NETWORK POLICY - Security
+# ===============================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: phase-staking-api-netpol
+  namespace: phase-production
+  labels:
+    app: phase-staking-api
+    environment: production
+spec:
+  podSelector:
+    matchLabels:
+      app: phase-staking-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53  # DNS
+    - protocol: UDP
+      port: 53  # DNS
+    - protocol: TCP
+      port: 443 # HTTPS
+    - protocol: TCP
+      port: 6379 # Redis
+    - protocol: TCP
+      port: 5432 # PostgreSQL
