@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase Agent Staking API</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #0F0E0C;
+            color: #F3EED9;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        .section {
+            padding: 80px 0;
+        }
+        
+        .section-small {
+            padding: 60px 0;
+        }
+        
+        h1, h2, h3 {
+            font-family: 'Audiowide', cursive;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            font-size: 3.5rem;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, #F3EED9, #F3EED9AA);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        h2 {
+            font-size: 2.5rem;
+            margin-bottom: 16px;
+        }
+        
+        h3 {
+            font-size: 1.5rem;
+            margin-bottom: 12px;
+        }
+        
+        .subtitle {
+            font-size: 1.3rem;
+            color: #F3EED9CC;
+            margin-bottom: 40px;
+            max-width: 600px;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 16px 32px;
+            background-color: transparent;
+            border: 2px solid #F3EED9;
+            color: #F3EED9;
+            text-decoration: none;
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            font-size: 1.1rem;
+        }
+        
+        .btn:hover {
+            background-color: #F3EED9;
+            color: #0F0E0C;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(243, 238, 217, 0.3);
+        }
+        
+        .hero {
+            text-align: center;
+            padding: 120px 0;
+        }
+        
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+            margin-top: 60px;
+        }
+        
+        .step {
+            text-align: center;
+            position: relative;
+        }
+        
+        .step::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 60px;
+            background-color: rgba(243, 238, 217, 0.05);
+            border: 2px solid #F3EED9;
+            border-radius: 50%;
+            margin-bottom: 24px;
+        }
+        
+        .step h3 {
+            margin-top: 80px;
+            color: #F3EED9;
+        }
+        
+        .step p {
+            color: #F3EED9BB;
+        }
+        
+        .endpoints-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 24px;
+            margin-top: 40px;
+        }
+        
+        .endpoint-card {
+            background-color: rgba(243, 238, 217, 0.05);
+            border: 1px solid rgba(243, 238, 217, 0.15);
+            border-radius: 8px;
+            padding: 24px;
+            transition: all 0.3s ease;
+        }
+        
+        .endpoint-card:hover {
+            border-color: #F3EED9;
+            transform: translateY(-4px);
+        }
+        
+        .method {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        
+        .method.post {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .method.get {
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .endpoint-path {
+            font-family: monospace;
+            color: #F3EED9;
+            font-size: 1.1rem;
+            margin-bottom: 8px;
+        }
+        
+        .endpoint-desc {
+            color: #F3EED9BB;
+            font-size: 0.9rem;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 32px;
+            margin-top: 60px;
+        }
+        
+        .feature {
+            text-align: center;
+        }
+        
+        .feature h3 {
+            color: #F3EED9;
+            margin-bottom: 16px;
+        }
+        
+        .feature p {
+            color: #F3EED9BB;
+        }
+        
+        .code-block {
+            background-color: rgba(243, 238, 217, 0.05);
+            border: 1px solid rgba(243, 238, 217, 0.15);
+            border-radius: 8px;
+            padding: 32px;
+            margin-top: 40px;
+            overflow-x: auto;
+        }
+        
+        .code-block pre {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            color: #F3EED9;
+            line-height: 1.5;
+            font-size: 0.95rem;
+        }
+        
+        .pricing-card {
+            background-color: rgba(243, 238, 217, 0.05);
+            border: 1px solid rgba(243, 238, 217, 0.15);
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            max-width: 400px;
+            margin: 40px auto 0;
+        }
+        
+        .price {
+            font-family: 'Audiowide', cursive;
+            font-size: 2.5rem;
+            color: #F3EED9;
+            margin: 20px 0;
+        }
+        
+        .footer {
+            background-color: rgba(243, 238, 217, 0.05);
+            border-top: 1px solid rgba(243, 238, 217, 0.15);
+            text-align: center;
+            padding: 60px 0;
+            margin-top: 80px;
+        }
+        
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 32px;
+        }
+        
+        .footer-links a {
+            color: #F3EED9BB;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .footer-links a:hover {
+            color: #F3EED9;
+        }
+        
+        .step-number {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'Audiowide', cursive;
+            font-size: 1.2rem;
+            color: #F3EED9;
+        }
+        
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.5rem;
+            }
+            
+            h2 {
+                font-size: 2rem;
+            }
+            
+            .hero {
+                padding: 80px 0;
+            }
+            
+            .section {
+                padding: 60px 0;
+            }
+            
+            .footer-links {
+                flex-direction: column;
+                gap: 20px;
+            }
+            
+            .steps {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <h1>Phase Agent Staking API</h1>
+            <p class="subtitle">Non-custodial staking infrastructure for AI agents on Solana</p>
+            <a href="/docs" class="btn">Get Started</a>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="section">
+        <div class="container">
+            <h2 style="text-align: center;">How It Works</h2>
+            <div class="steps">
+                <div class="step">
+                    <span class="step-number">1</span>
+                    <h3>Agent Calls API</h3>
+                    <p>Your agent requests an unsigned transaction for staking operations</p>
+                </div>
+                <div class="step">
+                    <span class="step-number">2</span>
+                    <h3>Agent Signs Locally</h3>
+                    <p>Private keys never leave your agent's environment. Complete non-custodial security</p>
+                </div>
+                <div class="step">
+                    <span class="step-number">3</span>
+                    <h3>Submit via Relay</h3>
+                    <p>Send the signed transaction through our relay for confirmation on Solana</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Endpoints Section -->
+    <section class="section">
+        <div class="container">
+            <h2 style="text-align: center;">API Endpoints</h2>
+            <div class="endpoints-grid">
+                <div class="endpoint-card">
+                    <span class="method post">POST</span>
+                    <div class="endpoint-path">/stake/build</div>
+                    <div class="endpoint-desc">Build native SOL staking transaction</div>
+                </div>
+                <div class="endpoint-card">
+                    <span class="method post">POST</span>
+                    <div class="endpoint-path">/stake/liquid/build</div>
+                    <div class="endpoint-desc">Build liquid staking transaction with $YIELD</div>
+                </div>
+                <div class="endpoint-card">
+                    <span class="method post">POST</span>
+                    <div class="endpoint-path">/unstake/build</div>
+                    <div class="endpoint-desc">Build unstaking transaction</div>
+                </div>
+                <div class="endpoint-card">
+                    <span class="method post">POST</span>
+                    <div class="endpoint-path">/tx/submit</div>
+                    <div class="endpoint-desc">Submit signed transaction via relay</div>
+                </div>
+                <div class="endpoint-card">
+                    <span class="method get">GET</span>
+                    <div class="endpoint-path">/stake/recommend</div>
+                    <div class="endpoint-desc">Get recommended staking strategies</div>
+                </div>
+                <div class="endpoint-card">
+                    <span class="method get">GET</span>
+                    <div class="endpoint-path">/positions/:wallet</div>
+                    <div class="endpoint-desc">View agent's staking positions</div>
+                </div>
+                <div class="endpoint-card">
+                    <span class="method post">POST</span>
+                    <div class="endpoint-path">/webhooks/register</div>
+                    <div class="endpoint-desc">Register webhook for real-time updates</div>
+                </div>
+                <div class="endpoint-card">
+                    <span class="method post">POST</span>
+                    <div class="endpoint-path">/agents/register</div>
+                    <div class="endpoint-desc">Register new agent for API access</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="section">
+        <div class="container">
+            <h2 style="text-align: center;">Features</h2>
+            <div class="features-grid">
+                <div class="feature">
+                    <h3>Non-custodial</h3>
+                    <p>We never touch your private keys. Complete security and control for your agents.</p>
+                </div>
+                <div class="feature">
+                    <h3>Transparent Fees</h3>
+                    <p>All fees are visible in every transaction. No hidden costs, complete transparency.</p>
+                </div>
+                <div class="feature">
+                    <h3>$YIELD Integration</h3>
+                    <p>Native support for liquid staking with $YIELD tokens for enhanced flexibility.</p>
+                </div>
+                <div class="feature">
+                    <h3>Real-time Webhooks</h3>
+                    <p>Get instant notifications about staking events, rewards, and position changes.</p>
+                </div>
+                <div class="feature">
+                    <h3>Tiered Rate Limits</h3>
+                    <p>Scalable rate limiting that grows with your agent's needs and usage patterns.</p>
+                </div>
+                <div class="feature">
+                    <h3>TypeScript SDK</h3>
+                    <p>Full type safety with our comprehensive SDK for seamless integration.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quickstart Section -->
+    <section class="section-small">
+        <div class="container">
+            <h2 style="text-align: center;">Quick Start</h2>
+            <div class="code-block">
+                <pre><code>import { PhaseStakingClient } from '@phase/staking-sdk';
+
+const client = new PhaseStakingClient({ 
+  apiKey: 'YOUR_KEY' 
+});
+
+const tx = await client.stake.buildNative({ 
+  agentWallet: 'YOUR_WALLET', 
+  amount: 1_000_000_000 
+});</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section class="section-small">
+        <div class="container">
+            <h2 style="text-align: center;">Pricing</h2>
+            <div class="pricing-card">
+                <h3>Simple & Transparent</h3>
+                <div class="price">0.1%</div>
+                <p>10 basis points on stake amount</p>
+                <p style="margin-top: 16px; color: #F3EED9BB; font-size: 0.9rem;">
+                    Transparent fee visible in every transaction. No hidden costs, no surprises.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <h3>Built by Phase</h3>
+            <div class="footer-links">
+                <a href="https://github.com/phaselabs">GitHub</a>
+                <a href="/docs">Documentation</a>
+                <a href="#sdk">TypeScript SDK</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
