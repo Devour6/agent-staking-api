@@ -139,6 +139,108 @@ export const validationSchemas = {
       .optional()
       .description('Stake amount in lamports'),
   }),
+
+  // Agent registration validation schema
+  agentRegistrationRequest: Joi.object({
+    agentName: Joi.string()
+      .min(3)
+      .max(50)
+      .pattern(/^[a-zA-Z0-9 _-]+$/)
+      .required()
+      .description('Agent name (3-50 characters, alphanumeric with spaces, hyphens, underscores)'),
+    agentWallet: publicKeySchema.required()
+      .description('Agent\'s Solana wallet address'),
+    email: Joi.string()
+      .email()
+      .optional()
+      .description('Contact email (optional)'),
+    description: Joi.string()
+      .max(200)
+      .optional()
+      .description('Agent description (optional, max 200 characters)'),
+    tier: Joi.string()
+      .valid('free', 'pro', 'enterprise')
+      .default('free')
+      .optional()
+      .description('API tier (defaults to free)'),
+    organization: Joi.string()
+      .min(2)
+      .max(100)
+      .pattern(/^[a-zA-Z0-9 .,&()-]+$/)
+      .when('tier', {
+        is: 'enterprise',
+        then: Joi.required(),
+        otherwise: Joi.optional()
+      })
+      .description('Organization name (required for enterprise tier, 2-100 characters)'),
+    organizationType: Joi.string()
+      .valid('startup', 'enterprise', 'government', 'nonprofit', 'individual', 'other')
+      .when('organization', {
+        is: Joi.exist(),
+        then: Joi.required(),
+        otherwise: Joi.optional()
+      })
+      .description('Organization type (required when organization is provided)'),
+    agreesToTerms: Joi.boolean()
+      .valid(true)
+      .required()
+      .description('Must agree to terms of service'),
+  }),
+
+  // Validator query validation schemas
+  validatorListQuery: Joi.object({
+    sortBy: Joi.string()
+      .valid('apy', 'commission', 'totalStake', 'uptimePercent', 'name')
+      .default('apy')
+      .optional(),
+    order: Joi.string()
+      .valid('asc', 'desc')
+      .default('desc')
+      .optional(),
+    minApy: Joi.number()
+      .min(0)
+      .max(20)
+      .optional(),
+    maxCommission: Joi.number()
+      .min(0)
+      .max(100)
+      .optional(),
+    activeOnly: Joi.string()
+      .valid('true', 'false')
+      .default('true')
+      .optional(),
+    limit: Joi.string()
+      .pattern(/^\d+$/)
+      .default('50')
+      .optional(),
+    offset: Joi.string()
+      .pattern(/^\d+$/)
+      .default('0')
+      .optional()
+  }),
+
+  validatorRecommendationsQuery: Joi.object({
+    amount: Joi.number()
+      .positive()
+      .optional()
+      .description('Stake amount in SOL for allocation calculation'),
+    riskTolerance: Joi.string()
+      .valid('low', 'medium', 'high')
+      .default('medium')
+      .optional(),
+    maxCommission: Joi.string()
+      .pattern(/^\d+(\.\d+)?$/)
+      .default('10')
+      .optional(),
+    diversify: Joi.string()
+      .valid('true', 'false')
+      .default('true')
+      .optional(),
+    count: Joi.string()
+      .pattern(/^\d+$/)
+      .default('3')
+      .optional()
+  }),
 };
 
 /**

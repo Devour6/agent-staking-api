@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { logger } from './logger';
 
-export type ApiKeyTier = 'free' | 'pro' | 'enterprise';
+export type ApiKeyTier = 'free' | 'pro' | 'enterprise' | 'admin';
 
 interface ApiKeyInfo {
   keyId: string;
@@ -12,6 +12,12 @@ interface ApiKeyInfo {
   rotationScheduledAt: Date | undefined;
   tier: ApiKeyTier;
   description: string | undefined;
+  // Agent-specific fields for self-registration
+  agentName?: string;
+  agentWallet?: string;
+  email?: string;
+  registeredAt?: Date;
+  selfRegistered?: boolean;
 }
 
 class ApiKeyManager {
@@ -58,7 +64,15 @@ class ApiKeyManager {
   /**
    * Generate a new API key
    */
-  generateApiKey(options: { tier?: ApiKeyTier; description?: string } = {}): { keyId: string; apiKey: string } {
+  generateApiKey(options: { 
+    tier?: ApiKeyTier; 
+    description?: string;
+    agentName?: string;
+    agentWallet?: string;
+    email?: string;
+    registeredAt?: Date;
+    selfRegistered?: boolean;
+  } = {}): { keyId: string; apiKey: string } {
     const keyId = crypto.randomUUID();
     const apiKey = crypto.randomBytes(32).toString('hex');
     const hashedKey = this.hashKey(apiKey);
@@ -71,7 +85,12 @@ class ApiKeyManager {
       isActive: true,
       rotationScheduledAt: new Date(Date.now() + this.rotationIntervalMs),
       tier: options.tier || 'free',
-      description: options.description
+      description: options.description,
+      ...(options.agentName && { agentName: options.agentName }),
+      ...(options.agentWallet && { agentWallet: options.agentWallet }),
+      ...(options.email && { email: options.email }),
+      ...(options.registeredAt && { registeredAt: options.registeredAt }),
+      ...(options.selfRegistered !== undefined && { selfRegistered: options.selfRegistered })
     };
 
     this.keys.set(keyId, keyInfo);
@@ -79,6 +98,9 @@ class ApiKeyManager {
     logger.info('Generated new API key', { 
       keyId, 
       tier: keyInfo.tier,
+      agentName: options.agentName,
+      agentWallet: options.agentWallet ? `${options.agentWallet.substring(0, 4)}...${options.agentWallet.substring(options.agentWallet.length - 4)}` : undefined,
+      selfRegistered: options.selfRegistered,
       rotationScheduledAt: keyInfo.rotationScheduledAt 
     });
 
@@ -104,6 +126,19 @@ class ApiKeyManager {
 
     logger.warn('Invalid API key attempted', { hashedKey: hashedKey.substring(0, 8) + '...' });
     return { valid: false };
+  }
+
+  /**
+   * Get key info by raw API key
+   */
+  async getKeyInfo(apiKey: string): Promise<ApiKeyInfo | null> {
+    const hashedKey = this.hashKey(apiKey);
+    for (const keyInfo of this.keys.values()) {
+      if (keyInfo.hashedKey === hashedKey) {
+        return keyInfo;
+      }
+    }
+    return null;
   }
 
   /**
@@ -208,6 +243,34 @@ class ApiKeyManager {
   }
 
   /**
+   * Find API key by agent wallet address
+   */
+  async findKeyByWallet(agentWallet: string): Promise<{
+    keyId: string;
+    createdAt: Date;
+    lastUsed: Date | undefined;
+    isActive: boolean;
+    tier: ApiKeyTier;
+    description: string | undefined;
+    agentName?: string;
+  } | null> {
+    for (const [keyId, keyInfo] of this.keys.entries()) {
+      if (keyInfo.agentWallet === agentWallet) {
+        return {
+          keyId: keyInfo.keyId,
+          createdAt: keyInfo.createdAt,
+          lastUsed: keyInfo.lastUsed,
+          isActive: keyInfo.isActive,
+          tier: keyInfo.tier,
+          description: keyInfo.description,
+          ...(keyInfo.agentName && { agentName: keyInfo.agentName })
+        };
+      }
+    }
+    return null;
+  }
+
+  /**
    * List all API keys (without sensitive data)
    */
   async listKeys(): Promise<Array<{
@@ -236,14 +299,30 @@ class ApiKeyManager {
   }
 
   /**
-   * Create a new API key with specified tier
+   * Create a new API key with specified tier and agent metadata
    */
-  async createKey(options: { tier?: ApiKeyTier; description?: string }): Promise<{
+  async createKey(options: { 
+    tier?: ApiKeyTier; 
+    description?: string;
+    agentName?: string;
+    agentWallet?: string;
+    email?: string;
+    registeredAt?: Date;
+    selfRegistered?: boolean;
+  }): Promise<{
     keyId: string;
     key: string;
     createdAt: Date;
   }> {
-    const { keyId, apiKey } = this.generateApiKey(options);
+    const { keyId, apiKey } = this.generateApiKey({
+      ...(options.tier && { tier: options.tier }),
+      ...(options.description && { description: options.description }),
+      ...(options.agentName && { agentName: options.agentName }),
+      ...(options.agentWallet && { agentWallet: options.agentWallet }),
+      ...(options.email && { email: options.email }),
+      ...(options.registeredAt && { registeredAt: options.registeredAt }),
+      ...(options.selfRegistered !== undefined && { selfRegistered: options.selfRegistered })
+    });
     const keyInfo = this.keys.get(keyId)!;
     
     return {

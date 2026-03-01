@@ -278,6 +278,284 @@ paths:
               schema:
                 type: string
 
+  /agents/register:
+    post:
+      summary: Self-Service Agent Registration
+      description: |
+        Register a new agent and receive an API key for self-service onboarding.
+        This endpoint allows AI agents to autonomously register and obtain API keys
+        for enterprise-grade staking operations.
+        
+        ## Features
+        - Self-service registration
+        - Automated API key provisioning
+        - Configurable tier selection
+        - Terms of service validation
+        
+        **Note**: API keys are only shown once during registration.
+      tags:
+        - Agent Onboarding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentRegistrationRequest'
+            examples:
+              basic:
+                summary: Basic agent registration
+                value:
+                  agentName: "Trading Bot Alpha"
+                  agentWallet: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+                  agreesToTerms: true
+              full:
+                summary: Full registration with metadata
+                value:
+                  agentName: "Portfolio Rebalancer"
+                  agentWallet: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+                  email: "agent@example.com"
+                  description: "Automated portfolio rebalancing agent"
+                  tier: "pro"
+                  agreesToTerms: true
+      responses:
+        '201':
+          description: Agent registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRegistrationResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Agent wallet already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /agents/{wallet}/status:
+    get:
+      summary: Check Agent Registration Status
+      description: |
+        Check if an agent wallet is already registered and get registration details.
+        Useful for agents to verify their registration status before attempting to register.
+      tags:
+        - Agent Onboarding
+      parameters:
+        - name: wallet
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
+          description: Agent's Solana wallet address
+          example: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+      responses:
+        '200':
+          description: Agent status retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentStatusResponse'
+        '400':
+          description: Invalid wallet address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /validators:
+    get:
+      summary: List Validators
+      description: |
+        Get a list of validators with performance metrics and filtering options.
+        Supports sorting by various criteria and filtering by performance thresholds.
+        
+        ## Features
+        - Performance-based filtering
+        - Multiple sorting options
+        - Pagination support
+        - Active validator filtering
+        
+        Use this endpoint to discover validators for staking operations.
+      tags:
+        - Validators
+      parameters:
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [apy, commission, totalStake, uptimePercent, name]
+            default: apy
+          description: Field to sort by
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort order
+        - name: minApy
+          in: query
+          schema:
+            type: number
+            minimum: 0
+            maximum: 20
+          description: Minimum APY filter
+          example: 6.0
+        - name: maxCommission
+          in: query
+          schema:
+            type: number
+            minimum: 0
+            maximum: 100
+          description: Maximum commission filter
+          example: 8.0
+        - name: activeOnly
+          in: query
+          schema:
+            type: string
+            enum: [true, false]
+            default: "true"
+          description: Filter to active validators only
+        - name: limit
+          in: query
+          schema:
+            type: string
+            pattern: '^\d+$'
+            default: "50"
+          description: Number of validators per page
+        - name: offset
+          in: query
+          schema:
+            type: string
+            pattern: '^\d+$'
+            default: "0"
+          description: Pagination offset
+      responses:
+        '200':
+          description: Validators retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidatorListResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /validators/recommend:
+    get:
+      summary: Get Validator Recommendations
+      description: |
+        Get personalized validator recommendations based on risk tolerance,
+        stake amount, and other preferences. Uses advanced scoring algorithms
+        to recommend optimal validators for your staking strategy.
+        
+        ## Features
+        - Risk-adjusted recommendations
+        - Diversification analysis
+        - Allocation suggestions
+        - Customizable criteria
+      tags:
+        - Validators
+      parameters:
+        - name: amount
+          in: query
+          schema:
+            type: number
+            minimum: 0.01
+          description: Stake amount in SOL for allocation calculation
+          example: 100.0
+        - name: riskTolerance
+          in: query
+          schema:
+            type: string
+            enum: [low, medium, high]
+            default: medium
+          description: Risk tolerance level
+        - name: maxCommission
+          in: query
+          schema:
+            type: string
+            pattern: '^\d+(\.\d+)?$'
+            default: "10"
+          description: Maximum acceptable commission rate
+          example: "8.0"
+        - name: diversify
+          in: query
+          schema:
+            type: string
+            enum: [true, false]
+            default: "true"
+          description: Whether to optimize for diversification
+        - name: count
+          in: query
+          schema:
+            type: string
+            pattern: '^\d+$'
+            default: "3"
+          description: Number of recommendations to return
+          example: "5"
+      responses:
+        '200':
+          description: Recommendations generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidatorRecommendationsResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /validators/{voteAccount}:
+    get:
+      summary: Get Validator Details
+      description: |
+        Get detailed information about a specific validator including
+        performance metrics, risk analysis, and recommendation scoring.
+        
+        Use this endpoint to analyze a validator before staking.
+      tags:
+        - Validators
+      parameters:
+        - name: voteAccount
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
+          description: Validator's vote account address
+          example: "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2"
+      responses:
+        '200':
+          description: Validator details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidatorDetailsResponse'
+        '400':
+          description: Invalid vote account address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Validator not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -496,6 +774,351 @@ components:
           type: string
           format: date-time
 
+    AgentRegistrationRequest:
+      type: object
+      required:
+        - agentName
+        - agentWallet
+        - agreesToTerms
+      properties:
+        agentName:
+          type: string
+          minLength: 3
+          maxLength: 50
+          pattern: '^[a-zA-Z0-9 _-]+$'
+          description: Agent name (3-50 characters, alphanumeric with spaces, hyphens, underscores)
+          example: "Trading Bot Alpha"
+        agentWallet:
+          type: string
+          pattern: '^[1-9A-HJ-NP-Za-km-z]{32,44}$'
+          description: Agent's Solana wallet public key (base58 encoded)
+          example: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+        email:
+          type: string
+          format: email
+          description: Contact email (optional)
+          example: "agent@example.com"
+        description:
+          type: string
+          maxLength: 200
+          description: Agent description (optional, max 200 characters)
+          example: "Automated portfolio rebalancing agent"
+        tier:
+          type: string
+          enum: [free, pro, enterprise]
+          default: free
+          description: API tier (defaults to free)
+          example: "pro"
+        agreesToTerms:
+          type: boolean
+          enum: [true]
+          description: Must agree to terms of service
+          example: true
+
+    AgentRegistrationResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            agentId:
+              type: string
+              description: Unique agent identifier
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            apiKey:
+              type: string
+              description: API key (only shown once)
+              example: "ak_1234567890abcdef1234567890abcdef12345678"
+            tier:
+              type: string
+              enum: [free, pro, enterprise]
+              description: API tier
+              example: "pro"
+            registeredAt:
+              type: string
+              format: date-time
+              description: Registration timestamp
+            message:
+              type: string
+              description: Welcome message
+              example: "Welcome Trading Bot Alpha! Your agent has been successfully registered."
+        timestamp:
+          type: string
+          format: date-time
+
+    AgentStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            registered:
+              type: boolean
+              description: Whether the agent wallet is registered
+              example: true
+            agentId:
+              type: string
+              description: Agent identifier (if registered)
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            tier:
+              type: string
+              enum: [free, pro, enterprise]
+              description: API tier (if registered)
+              example: "pro"
+            registeredAt:
+              type: string
+              format: date-time
+              description: Registration timestamp (if registered)
+            lastUsed:
+              type: string
+              format: date-time
+              description: Last API key usage (if available)
+            isActive:
+              type: boolean
+              description: Whether the API key is active (if registered)
+              example: true
+            message:
+              type: string
+              description: Status message
+              example: "Agent registered"
+        timestamp:
+          type: string
+          format: date-time
+
+    ValidatorInfo:
+      type: object
+      properties:
+        voteAccount:
+          type: string
+          description: Validator vote account address
+          example: "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2"
+        identityAccount:
+          type: string
+          description: Validator identity account address
+          example: "GrDMoYLkXX9JSFiHwNYRLFXnJY8RjGhLzVe7vL2q9MDZ"
+        name:
+          type: string
+          description: Validator name
+          example: "Phase Labs Validator"
+        website:
+          type: string
+          description: Validator website
+          example: "https://phaselabs.io"
+        details:
+          type: string
+          description: Validator description
+          example: "High-performance validator with MEV protection"
+        commission:
+          type: number
+          description: Commission rate percentage
+          example: 5.0
+        apy:
+          type: number
+          description: Annual percentage yield
+          example: 7.2
+        totalStake:
+          type: number
+          description: Total stake in lamports
+          example: 50000000000000
+        activeStake:
+          type: number
+          description: Active stake in lamports
+          example: 48500000000000
+        dataCenter:
+          type: string
+          description: Data center location
+          example: "US-East"
+        country:
+          type: string
+          description: Country location
+          example: "United States"
+        isActive:
+          type: boolean
+          description: Whether validator is active
+          example: true
+        isDelinquent:
+          type: boolean
+          description: Whether validator is delinquent
+          example: false
+        skippedSlots:
+          type: integer
+          description: Number of skipped slots
+          example: 12
+        lastVote:
+          type: integer
+          description: Last vote slot number
+          example: 245780123
+        performance:
+          type: object
+          properties:
+            skipRate:
+              type: number
+              description: Skip rate percentage
+              example: 0.05
+            uptimePercent:
+              type: number
+              description: Uptime percentage
+              example: 99.95
+            epochsActive:
+              type: integer
+              description: Number of epochs active
+              example: 450
+        features:
+          type: array
+          items:
+            type: string
+          description: Validator features
+          example: ["MEV Protection", "Auto-updates", "Monitoring"]
+
+    ValidatorListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            validators:
+              type: array
+              items:
+                $ref: '#/components/schemas/ValidatorInfo'
+            pagination:
+              type: object
+              properties:
+                total:
+                  type: integer
+                  example: 150
+                limit:
+                  type: integer
+                  example: 50
+                offset:
+                  type: integer
+                  example: 0
+                hasMore:
+                  type: boolean
+                  example: true
+            filters:
+              type: object
+              properties:
+                sortBy:
+                  type: string
+                  example: "apy"
+                order:
+                  type: string
+                  example: "desc"
+                minApy:
+                  type: number
+                  example: 6.0
+                maxCommission:
+                  type: number
+                  example: 10.0
+                activeOnly:
+                  type: boolean
+                  example: true
+        timestamp:
+          type: string
+          format: date-time
+
+    ValidatorRecommendation:
+      type: object
+      properties:
+        voteAccount:
+          type: string
+          example: "7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2"
+        name:
+          type: string
+          example: "Phase Labs Validator"
+        apy:
+          type: number
+          example: 7.2
+        commission:
+          type: number
+          example: 5.0
+        score:
+          type: number
+          description: Recommendation score (0-100)
+          example: 85.5
+        riskLevel:
+          type: string
+          enum: [low, medium, high]
+          example: "low"
+        reason:
+          type: string
+          description: Explanation for recommendation
+          example: "Recommended for high APY, low commission, excellent uptime"
+        suggestedAllocation:
+          type: number
+          description: Suggested stake allocation in SOL
+          example: 33.33
+
+    ValidatorRecommendationsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            recommendations:
+              type: array
+              items:
+                $ref: '#/components/schemas/ValidatorRecommendation'
+            criteria:
+              type: object
+              properties:
+                riskTolerance:
+                  type: string
+                  example: "medium"
+                maxCommission:
+                  type: number
+                  example: 10.0
+                diversify:
+                  type: boolean
+                  example: true
+                stakeAmount:
+                  type: number
+                  example: 100.0
+            totalValidators:
+              type: integer
+              description: Total validators considered
+              example: 150
+        timestamp:
+          type: string
+          format: date-time
+
+    ValidatorDetailsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            validator:
+              $ref: '#/components/schemas/ValidatorInfo'
+            recommendationScore:
+              type: number
+              description: Recommendation score (0-100)
+              example: 85.5
+            riskFactors:
+              type: array
+              items:
+                type: string
+              description: Identified risk factors
+              example: ["High commission rate"]
+        timestamp:
+          type: string
+          format: date-time
+
 tags:
   - name: General
     description: General API information
@@ -503,6 +1126,10 @@ tags:
     description: Health check endpoints
   - name: Monitoring
     description: Monitoring and metrics
+  - name: Agent Onboarding
+    description: Self-service agent registration and status endpoints
+  - name: Validators
+    description: Validator discovery, performance metrics, and recommendations
   - name: Staking
     description: Staking transaction building
   - name: Documentation
