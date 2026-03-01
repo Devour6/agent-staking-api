@@ -1,8 +1,17 @@
 import fs from 'fs/promises';
 import path from 'path';
+import crypto from 'crypto';
 import { WebhookRegistration, WebhookDelivery } from '@/types/webhook';
 import { AgentRegistration, AgentApiKey } from '@/types/agent';
 import { logger } from '@/services/logger';
+
+interface WebhookSecret {
+  webhookId: string;
+  secret: string;
+  createdAt: string;
+  expiresAt: string;
+  isActive: boolean;
+}
 
 export class SimpleJsonStorage {
   private dataDir: string;
@@ -10,6 +19,7 @@ export class SimpleJsonStorage {
   private deliveriesFile: string;
   private agentsFile: string;
   private agentApiKeysFile: string;
+  private webhookSecretsFile: string;
 
   constructor(dataDir: string = 'data') {
     this.dataDir = dataDir;
@@ -17,6 +27,7 @@ export class SimpleJsonStorage {
     this.deliveriesFile = path.join(dataDir, 'deliveries.json');
     this.agentsFile = path.join(dataDir, 'agents.json');
     this.agentApiKeysFile = path.join(dataDir, 'agent-api-keys.json');
+    this.webhookSecretsFile = path.join(dataDir, 'webhook-secrets.json');
   }
 
   async init(): Promise<void> {
@@ -49,12 +60,19 @@ export class SimpleJsonStorage {
         await fs.writeFile(this.agentApiKeysFile, JSON.stringify([], null, 2));
       }
 
+      try {
+        await fs.access(this.webhookSecretsFile);
+      } catch {
+        await fs.writeFile(this.webhookSecretsFile, JSON.stringify([], null, 2));
+      }
+
       logger.info('Storage initialized', {
         dataDir: this.dataDir,
         webhooksFile: this.webhooksFile,
         deliveriesFile: this.deliveriesFile,
         agentsFile: this.agentsFile,
         agentApiKeysFile: this.agentApiKeysFile,
+        webhookSecretsFile: this.webhookSecretsFile,
       });
     } catch (error) {
       logger.error('Failed to initialize storage', {
@@ -373,6 +391,160 @@ export class SimpleJsonStorage {
         error: (error as Error).message,
       });
       throw error;
+    }
+  }
+
+  // Webhook Secret operations
+  async getWebhookSecrets(): Promise<WebhookSecret[]> {
+    try {
+      const data = await fs.readFile(this.webhookSecretsFile, 'utf-8');
+      return JSON.parse(data);
+    } catch (error) {
+      logger.error('Failed to read webhook secrets', {
+        error: (error as Error).message,
+      });
+      return [];
+    }
+  }
+
+  async generateWebhookSecret(webhookId: string, expirationDays: number = 90): Promise<string> {
+    try {
+      // Generate a cryptographically secure random secret
+      const secret = crypto.randomBytes(32).toString('hex');
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + expirationDays * 24 * 60 * 60 * 1000);
+
+      // Store the secret
+      const webhookSecret: WebhookSecret = {
+        webhookId,
+        secret,
+        createdAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        isActive: true,
+      };
+
+      const secrets = await this.getWebhookSecrets();
+      
+      // Deactivate any existing secrets for this webhook
+      secrets.forEach(s => {
+        if (s.webhookId === webhookId && s.isActive) {
+          s.isActive = false;
+        }
+      });
+
+      // Add new secret
+      secrets.push(webhookSecret);
+
+      await fs.writeFile(this.webhookSecretsFile, JSON.stringify(secrets, null, 2));
+
+      logger.info('Generated new webhook secret', {
+        webhookId,
+        expiresAt: expiresAt.toISOString(),
+      });
+
+      return secret;
+    } catch (error) {
+      logger.error('Failed to generate webhook secret', {
+        webhookId,
+        error: (error as Error).message,
+      });
+      throw error;
+    }
+  }
+
+  async getActiveWebhookSecret(webhookId: string): Promise<string | null> {
+    try {
+      const secrets = await this.getWebhookSecrets();
+      const now = new Date();
+
+      // Find active, non-expired secret
+      const activeSecret = secrets.find(s => 
+        s.webhookId === webhookId && 
+        s.isActive && 
+        new Date(s.expiresAt) > now
+      );
+
+      if (!activeSecret) {
+        // If no active secret exists, generate a new one
+        logger.info('No active webhook secret found, generating new one', { webhookId });
+        return await this.generateWebhookSecret(webhookId);
+      }
+
+      // Check if secret is expiring soon (within 7 days)
+      const expiresIn = new Date(activeSecret.expiresAt).getTime() - now.getTime();
+      const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
+
+      if (expiresIn <= sevenDaysInMs) {
+        logger.warn('Webhook secret expiring soon, consider rotation', {
+          webhookId,
+          expiresAt: activeSecret.expiresAt,
+        });
+      }
+
+      return activeSecret.secret;
+    } catch (error) {
+      logger.error('Failed to get active webhook secret', {
+        webhookId,
+        error: (error as Error).message,
+      });
+      throw error;
+    }
+  }
+
+  async rotateWebhookSecret(webhookId: string): Promise<string> {
+    try {
+      logger.info('Rotating webhook secret', { webhookId });
+      return await this.generateWebhookSecret(webhookId);
+    } catch (error) {
+      logger.error('Failed to rotate webhook secret', {
+        webhookId,
+        error: (error as Error).message,
+      });
+      throw error;
+    }
+  }
+
+  async cleanupExpiredSecrets(): Promise<void> {
+    try {
+      const secrets = await this.getWebhookSecrets();
+      const now = new Date();
+      const initialCount = secrets.length;
+      
+      // Remove secrets that have been expired for more than 30 days
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const cleanedSecrets = secrets.filter(s => 
+        s.isActive || new Date(s.expiresAt) > thirtyDaysAgo
+      );
+
+      if (cleanedSecrets.length < initialCount) {
+        await fs.writeFile(this.webhookSecretsFile, JSON.stringify(cleanedSecrets, null, 2));
+        logger.info('Cleaned up expired webhook secrets', {
+          removedCount: initialCount - cleanedSecrets.length,
+          remainingCount: cleanedSecrets.length,
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to cleanup expired secrets', {
+        error: (error as Error).message,
+      });
+    }
+  }
+
+  async listSecretsForRotation(): Promise<WebhookSecret[]> {
+    try {
+      const secrets = await this.getWebhookSecrets();
+      const now = new Date();
+      const rotationThreshold = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days from now
+
+      return secrets.filter(s => 
+        s.isActive && 
+        new Date(s.expiresAt) <= rotationThreshold
+      );
+    } catch (error) {
+      logger.error('Failed to list secrets for rotation', {
+        error: (error as Error).message,
+      });
+      return [];
     }
   }
 }

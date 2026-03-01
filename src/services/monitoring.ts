@@ -100,9 +100,42 @@ export class StakeMonitoringService {
         const stakeAccountInfo = await this.connection.getAccountInfo(stakeAccountPubkey);
         
         if (stakeAccountInfo) {
-          // Check if stake account is activated by examining the data length and structure
-          // A full stake account has more data than an uninitialized one
-          const isActivated = stakeAccountInfo.data.length > 200; // Rough heuristic
+          // Check if stake account is activated using proper Solana on-chain verification
+          let isActivated = false;
+          try {
+            // Check if the account is owned by the stake program
+            const isStakeAccount = stakeAccountInfo.owner.equals(StakeProgram.programId);
+            
+            if (isStakeAccount && stakeAccountInfo.data.length >= 200) {
+              // Read the state discriminator from the beginning of the data
+              const stateDiscriminator = stakeAccountInfo.data.readUInt32LE(0);
+              
+              // State discriminators in stake program:
+              // 0 = Uninitialized
+              // 1 = Initialized (created but not delegated)
+              // 2 = Stake (delegated and potentially active)
+              // 3 = RewardsPool (old, not used)
+              
+              if (stateDiscriminator === 2) {
+                // Further check if the stake is actually active by reading delegation info
+                // At offset 220 (after meta and authorized fields), there should be delegation info
+                if (stakeAccountInfo.data.length >= 280) {
+                  // Check if there's a valid vote account (not all zeros)
+                  const voteAccount = new PublicKey(stakeAccountInfo.data.slice(220, 252));
+                  isActivated = !voteAccount.equals(PublicKey.default);
+                }
+              }
+            }
+          } catch (error) {
+            // If any parsing fails, fall back to length-based heuristic (improved)
+            logger.debug('Failed to parse stake account state, using fallback', {
+              stakeAccount: monitoredStake.stakeAccount,
+              error: (error as Error).message,
+            });
+            // Use improved heuristic: proper stake accounts are typically 200+ bytes AND owned by stake program
+            isActivated = stakeAccountInfo.data.length >= 200 && 
+                         stakeAccountInfo.owner.equals(StakeProgram.programId);
+          }
           
           if (isActivated) {
             monitoredStake.status = 'activated';

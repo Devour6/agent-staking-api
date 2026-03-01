@@ -7,6 +7,7 @@ process.env.SOLANA_RPC_URL = 'https://api.devnet.solana.com';
 process.env.SOLANA_CLUSTER = 'mainnet-beta';
 process.env.PHASE_FEE_WALLET = '11111111111111111111111111111112';
 process.env.PHASE_VALIDATOR_VOTE_ACCOUNT = '11111111111111111111111111111113';
+process.env.PHASE_YIELD_STAKE_POOL_ADDRESS = '11111111111111111111111111111114';
 process.env.API_KEY_SECRET = 'a'.repeat(64);
 // Increase rate limits for tests to prevent 429 errors
 process.env.RATE_LIMIT_MAX_REQUESTS = '1000';
